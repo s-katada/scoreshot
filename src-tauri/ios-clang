@@ -1,0 +1,9 @@
+#!/bin/sh
+# iOS 向けクロスコンパイル用の clang。
+#
+# nix の cc-wrapper は単一ターゲット前提で作られており、iOS 向けに呼ばれると
+# -mmacos-version-min を注入して衝突する（nix 自身も un-wrapped compiler を
+# 使うよう警告する）。Xcode の素の clang に委譲する。
+#
+# Xcode の場所を直書きしないよう xcrun に解決させている。
+exec "$(/usr/bin/xcrun -f clang)" "$@"

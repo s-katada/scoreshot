@@ -1,0 +1,8 @@
+# Xcode のビルドスクリプトフェーズには dev シェルの環境変数が届かないため、
+# iOS ターゲット向けのコンパイラ指定を cargo の設定として持たせる。
+# relative = true により、このファイルの親ディレクトリ (src-tauri) 基準で
+# 絶対パスに解決される。
+[env]
+CC_aarch64_apple_ios = { value = "ios-clang", relative = true }
+CC_aarch64_apple_ios_sim = { value = "ios-clang", relative = true }
+CC_x86_64_apple_ios = { value = "ios-clang", relative = true }
