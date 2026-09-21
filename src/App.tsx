@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ScoreView } from "./components/ScoreView";
-import { play, playNote, stop } from "./audio/player";
+import { loadInstrument, play, playNote, stop } from "./audio/player";
 import { scoreToMusicXml } from "./model/musicxml";
 import { sampleScore } from "./model/sample";
 
@@ -11,6 +11,21 @@ export default function App() {
   const [tempoInput, setTempoInput] = useState(sampleScore.tempo);
   const [tempo, setTempo] = useState(sampleScore.tempo);
   const [playing, setPlaying] = useState(false);
+  const [audioReady, setAudioReady] = useState(false);
+
+  // 音源の読み込みにはユーザー操作が要らないので起動時に済ませておく。
+  // 最初の再生で 2MB の読み込みを待たされるのを避けるため。
+  useEffect(() => {
+    let cancelled = false;
+    void loadInstrument().then(() => {
+      if (!cancelled) {
+        setAudioReady(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const score = useMemo(() => ({ ...sampleScore, tempo }), [tempo]);
   const musicXml = useMemo(() => scoreToMusicXml(score), [score]);
@@ -40,9 +55,10 @@ export default function App() {
         <button
           type="button"
           onClick={() => void handlePlay()}
-          className="rounded-md bg-neutral-900 px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-85 dark:bg-white dark:text-neutral-900"
+          disabled={!audioReady}
+          className="rounded-md bg-neutral-900 px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-85 disabled:opacity-40 dark:bg-white dark:text-neutral-900"
         >
-          {playing ? "停止" : "再生"}
+          {!audioReady ? "音源を読み込み中…" : playing ? "停止" : "再生"}
         </button>
 
         <label className="flex items-center gap-3 text-sm">
