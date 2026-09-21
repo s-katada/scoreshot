@@ -100,6 +100,34 @@ function collectCursorStops(osmd: OpenSheetMusicDisplay): number[] {
   return stops;
 }
 
+/**
+ * カーソルの縦線が潰れるのを防ぐ。
+ *
+ * OSMD は縦線を <img> で描き、その高さを HTML の height 属性で与える。
+ * ところが Tailwind の preflight が img に height:auto を当てるため、
+ * 属性が打ち消されて画像本来の高さ (生成元のキャンバスが 1px) に潰れる。
+ * 属性値をインラインスタイルへ写して上書きする。
+ */
+function applyCursorSize(element: HTMLImageElement | undefined): void {
+  if (!element) {
+    return;
+  }
+  // img.width / img.height は描画済みだとレンダリング後の値を返すため、
+  // 前回書いたインラインスタイルを読み返して値が固まってしまう。
+  // OSMD が書いた属性そのものを読む。
+  const width = element.getAttribute("width");
+  const height = element.getAttribute("height");
+  if (width === null || height === null) {
+    return;
+  }
+  element.style.width = `${width}px`;
+  element.style.height = `${height}px`;
+  element.style.maxWidth = "none";
+  // OSMD は z-index: -1 で音符の裏に敷く想定だが、それだと楽譜の白背景の
+  // 裏に回り込んで見えなくなるため前面に出す
+  element.style.zIndex = "5";
+}
+
 export function ScoreView({
   musicXml,
   playbackPosition,
@@ -201,10 +229,9 @@ export function ScoreView({
 
     if (cursor.Hidden) {
       cursor.show();
-      // OSMD はカーソルを z-index: -1 で敷く (音符の裏に置く想定)。
-      // このままだと楽譜の白背景の裏に回り込んで見えないため前面に出す。
-      cursor.cursorElement.style.zIndex = "5";
     }
+    // next() や show() のたびに OSMD が属性を書き直すので毎回当て直す
+    applyCursorSize(cursor.cursorElement);
   }, [playbackPosition]);
 
   // 楽譜は紙の見立てなので、配色に関わらず白地に黒で描く。
