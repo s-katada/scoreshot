@@ -13,3 +13,6 @@ dist/
 # Tauri
 # target と gen/schemas は src-tauri/.gitignore 側で無視される。
 # gen/apple は Info.plist などの設定を含むためコミットする。
+
+# pnpm check の中間生成物
+.tmp-check/
