@@ -5,3 +5,11 @@ result-*
 
 # macOS
 .DS_Store
+
+# node
+node_modules/
+dist/
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
