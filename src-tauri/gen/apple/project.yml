@@ -1,8 +1,8 @@
 name: scoreshot
 options:
-  bundleIdPrefix: com.scoreshot.app
+  bundleIdPrefix: dev.katada.scoreshot
   deploymentTarget:
-    iOS: 14.0
+    iOS: 16.0
 fileGroups: [../../src]
 configs:
   debug: debug
@@ -11,7 +11,7 @@ settingGroups:
   app:
     base:
       PRODUCT_NAME: scoreshot
-      PRODUCT_BUNDLE_IDENTIFIER: com.scoreshot.app
+      PRODUCT_BUNDLE_IDENTIFIER: dev.katada.scoreshot
 targetTemplates:
   app:
     type: application
@@ -80,7 +80,30 @@ targets:
       - sdk: UIKit.framework
       - sdk: WebKit.framework
     preBuildScripts:
-      - script: cargo tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}
+      - script: |
+          # Xcode のスクリプトフェーズは環境が消毒されており、nix の環境変数
+          # (NIX_LDFLAGS など) も PATH も引き継がれない。そのままだと
+          # proc-macro / build script のホストリンクが
+          #   ld: library not found for -liconv
+          # で落ちるため、dev シェルに入り直して実行する。
+          #
+          # その際の注意が 2 つ:
+          #  - SDKROOT は Xcode が iOS 向けに設定している。残すとホスト側の
+          #    リンクまで iOS の sysroot を見てしまうので env -u で外し、
+          #    値は --sdk-root で明示的に渡す。
+          #  - nix develop は独自の TMPDIR を作る。tauri の親プロセスは
+          #    TMPDIR 配下のファイルで子と通信するため、元の値を復元する。
+          set -e
+          env -u SDKROOT nix develop "$SRCROOT/../../.." --command \
+            sh -c 'export TMPDIR="$1"; shift; exec cargo tauri ios xcode-script -v "$@"' \
+            _ "${TMPDIR:-/tmp}" \
+              --platform "${PLATFORM_DISPLAY_NAME:?}" \
+              --sdk-root "${SDKROOT:?}" \
+              --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" \
+              --header-search-paths "${HEADER_SEARCH_PATHS:?}" \
+              --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" \
+              --configuration "${CONFIGURATION:?}" \
+              ${FORCE_COLOR} ${ARCHS:?}
         name: Build Rust Code
         basedOnDependencyAnalysis: false
         outputFiles:
