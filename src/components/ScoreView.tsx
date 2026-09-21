@@ -6,10 +6,19 @@
  */
 
 import { useEffect, useRef } from "react";
-import { OpenSheetMusicDisplay, Pitch } from "opensheetmusicdisplay";
+import {
+  CursorType,
+  OpenSheetMusicDisplay,
+  Pitch,
+} from "opensheetmusicdisplay";
 
 interface ScoreViewProps {
   musicXml: string;
+  /**
+   * 再生位置を四分音符単位で受ける。null なら停止中。
+   * 今どこを弾いているかを示す縦線を動かすために使う。
+   */
+  playbackPosition?: number | null;
   /** 音符がクリックされたとき、その音の周波数 (Hz) を通知する */
   onNoteClick?: (frequency: number) => void;
 }
@@ -69,8 +78,37 @@ function attachNoteHandlers(
   return cleanups;
 }
 
-export function ScoreView({ musicXml, onNoteClick }: ScoreViewProps) {
+/**
+ * カーソルが止まる位置を四分音符単位で全部集める。
+ *
+ * 再生位置からカーソルを動かすには「どこで止まれるか」を知る必要があるが、
+ * OSMD のイテレータは次の位置を覗き見できない。一度なめて記録しておけば、
+ * 以降は添字の差だけ next() を呼べばよくなる。
+ */
+function collectCursorStops(osmd: OpenSheetMusicDisplay): number[] {
+  const cursor = osmd.cursor;
+  const stops: number[] = [];
+  cursor.reset();
+  // 万一 EndReached にならなかったときのための保険
+  const limit = 10000;
+  while (!cursor.Iterator.EndReached && stops.length < limit) {
+    // OSMD のタイムスタンプは全音符を 1 とするので 4 倍して四分音符単位にする
+    stops.push(cursor.Iterator.currentTimeStamp.RealValue * 4);
+    cursor.next();
+  }
+  cursor.reset();
+  return stops;
+}
+
+export function ScoreView({
+  musicXml,
+  playbackPosition,
+  onNoteClick,
+}: ScoreViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
+  const cursorStopsRef = useRef<number[]>([]);
+  const cursorIndexRef = useRef(0);
   // ハンドラの差し替えで楽譜を描き直さずに済むよう ref 経由で参照する
   const onNoteClickRef = useRef(onNoteClick);
   onNoteClickRef.current = onNoteClick;
@@ -89,6 +127,15 @@ export function ScoreView({ musicXml, onNoteClick }: ScoreViewProps) {
       backend: "svg",
       drawTitle: true,
       drawPartNames: false,
+      // 今どこを弾いているかを示す縦線
+      cursorsOptions: [
+        {
+          type: CursorType.ThinLeft,
+          color: "#2563eb",
+          alpha: 0.9,
+          follow: true,
+        },
+      ],
     });
 
     void (async () => {
@@ -100,6 +147,10 @@ export function ScoreView({ musicXml, onNoteClick }: ScoreViewProps) {
       if (disposed) {
         return;
       }
+      osmdRef.current = osmd;
+      cursorStopsRef.current = collectCursorStops(osmd);
+      cursorIndexRef.current = 0;
+      osmd.cursor.hide();
       cleanups = attachNoteHandlers(osmd, (frequency) => {
         onNoteClickRef.current?.(frequency);
       });
@@ -110,16 +161,63 @@ export function ScoreView({ musicXml, onNoteClick }: ScoreViewProps) {
       for (const cleanup of cleanups) {
         cleanup();
       }
+      osmdRef.current = null;
       osmd.clear();
     };
   }, [musicXml]);
 
+  useEffect(() => {
+    const osmd = osmdRef.current;
+    if (osmd === null) {
+      return;
+    }
+    const cursor = osmd.cursor;
+
+    if (playbackPosition === null || playbackPosition === undefined) {
+      if (!cursor.Hidden) {
+        cursor.hide();
+      }
+      cursor.reset();
+      cursorIndexRef.current = 0;
+      return;
+    }
+
+    // 再生位置を追い越さない範囲で、いちばん後ろの停止点を選ぶ
+    const stops = cursorStopsRef.current;
+    let target = 0;
+    while (target + 1 < stops.length && stops[target + 1] <= playbackPosition) {
+      target += 1;
+    }
+
+    // 巻き戻しは reset からやり直す (previous() を重ねるより確実)
+    if (target < cursorIndexRef.current) {
+      cursor.reset();
+      cursorIndexRef.current = 0;
+    }
+    while (cursorIndexRef.current < target) {
+      cursor.next();
+      cursorIndexRef.current += 1;
+    }
+
+    if (cursor.Hidden) {
+      cursor.show();
+      // OSMD はカーソルを z-index: -1 で敷く (音符の裏に置く想定)。
+      // このままだと楽譜の白背景の裏に回り込んで見えないため前面に出す。
+      cursor.cursorElement.style.zIndex = "5";
+    }
+  }, [playbackPosition]);
+
   // 楽譜は紙の見立てなので、配色に関わらず白地に黒で描く。
-  // OSMD が幅を測る要素には padding を置かない。padding ぶんまで
-  // 描画幅に使われて横にはみ出すため、外側の枠と分けている。
+  //
+  // OSMD が幅を測る要素には padding を置かない。padding ぶんまで描画幅に
+  // 使われて横にはみ出すため、外側の枠と分けている。
+  //
+  // 描画先に isolate を効かせて重ね合わせの文脈を作っている。これが無いと
+  // OSMD が z-index: -1 で置く再生カーソルが、外枠の白背景の裏に回り込んで
+  // 見えなくなる。
   return (
     <div className="w-full overflow-x-auto rounded-lg bg-white p-4 text-black shadow-sm">
-      <div ref={containerRef} className="w-full" />
+      <div ref={containerRef} className="relative isolate w-full" />
     </div>
   );
 }

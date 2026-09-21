@@ -12,6 +12,8 @@ export default function App() {
   const [tempo, setTempo] = useState(sampleScore.tempo);
   const [playing, setPlaying] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
+  // 再生位置 (四分音符単位)。null は停止中
+  const [position, setPosition] = useState<number | null>(null);
 
   // 音源の読み込みにはユーザー操作が要らないので起動時に済ませておく。
   // 最初の再生で 2MB の読み込みを待たされるのを避けるため。
@@ -34,10 +36,18 @@ export default function App() {
     if (playing) {
       stop();
       setPlaying(false);
+      setPosition(null);
       return;
     }
     setPlaying(true);
-    await play(score, () => setPlaying(false));
+    setPosition(0);
+    await play(score, {
+      onEnded: () => {
+        setPlaying(false);
+        setPosition(null);
+      },
+      onPosition: setPosition,
+    });
   }, [playing, score]);
 
   const handleNoteClick = useCallback((frequency: number) => {
@@ -80,10 +90,14 @@ export default function App() {
         </label>
       </section>
 
-      <ScoreView musicXml={musicXml} onNoteClick={handleNoteClick} />
+      <ScoreView
+        musicXml={musicXml}
+        playbackPosition={position}
+        onNoteClick={handleNoteClick}
+      />
 
       <p className="text-sm opacity-50">
-        音符をクリックするとその音だけ鳴る。
+        再生すると縦線が今の位置を示す。音符をクリックするとその音だけ鳴る。
       </p>
     </main>
   );

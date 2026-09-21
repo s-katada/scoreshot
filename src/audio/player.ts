@@ -142,6 +142,17 @@ interface ScheduledNote {
 
 let currentPart: Tone.Part<ScheduledNote> | null = null;
 let endTimeoutId: number | null = null;
+let positionFrameId: number | null = null;
+
+export interface PlayOptions {
+  /** 最後の音が鳴り終わったときに呼ばれる */
+  onEnded?: () => void;
+  /**
+   * 再生位置を四分音符単位で毎フレーム通知する。
+   * 楽譜上のカーソルを追従させるために使う。
+   */
+  onPosition?: (quarterPosition: number) => void;
+}
 
 /** 再生中のものがあれば止めて、後始末する */
 export function stop(): void {
@@ -156,15 +167,20 @@ export function stop(): void {
     clearTimeout(endTimeoutId);
     endTimeoutId = null;
   }
+  if (positionFrameId !== null) {
+    cancelAnimationFrame(positionFrameId);
+    positionFrameId = null;
+  }
   instrument?.releaseAll();
 }
 
 /**
  * 楽譜を頭から再生する。
- *
- * @param onEnded 最後の音が鳴り終わったときに呼ばれる
  */
-export async function play(score: Score, onEnded?: () => void): Promise<void> {
+export async function play(
+  score: Score,
+  options: PlayOptions = {},
+): Promise<void> {
   await ensureAudioReady();
   stop();
 
@@ -191,10 +207,20 @@ export async function play(score: Score, onEnded?: () => void): Promise<void> {
   currentPart.start(0);
   transport.start();
 
+  // 再生位置の通知。Transport の経過秒をそのまま拍に直している
+  if (options.onPosition) {
+    const report = options.onPosition;
+    const tick = () => {
+      report(transport.seconds / secondsPerQuarter);
+      positionFrameId = requestAnimationFrame(tick);
+    };
+    positionFrameId = requestAnimationFrame(tick);
+  }
+
   const totalSeconds = scoreQuarterLength(score) * secondsPerQuarter;
   endTimeoutId = window.setTimeout(() => {
     stop();
-    onEnded?.();
+    options.onEnded?.();
   }, totalSeconds * 1000 + 300);
 }
 
