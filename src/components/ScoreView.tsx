@@ -7,6 +7,7 @@
 
 import { useEffect, useRef } from "react";
 import {
+  type Cursor,
   CursorType,
   OpenSheetMusicDisplay,
   Pitch,
@@ -135,20 +136,28 @@ export function ScoreView({
 }: ScoreViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
+  const noteCleanupsRef = useRef<Array<() => void>>([]);
+  // 読み込みは非同期なので、古い読み込みの続きが新しい描画を壊さないよう
+  // 世代番号で打ち切る
+  const loadTokenRef = useRef(0);
   const cursorStopsRef = useRef<number[]>([]);
   const cursorIndexRef = useRef(0);
   // ハンドラの差し替えで楽譜を描き直さずに済むよう ref 経由で参照する
   const onNoteClickRef = useRef(onNoteClick);
   onNoteClickRef.current = onNoteClick;
 
+  /**
+   * OSMD は一度だけ作る。
+   *
+   * 楽譜が変わるたびに作り直すと、前のインスタンスが残した要素と
+   * autoResize のリサイズ監視がコンテナに積み上がり、描画が下へずれて
+   * 楽譜が見えなくなる (issue #1)。
+   */
   useEffect(() => {
     const container = containerRef.current;
     if (container === null) {
       return;
     }
-
-    let disposed = false;
-    let cleanups: Array<() => void> = [];
 
     const osmd = new OpenSheetMusicDisplay(container, {
       autoResize: true,
@@ -165,33 +174,53 @@ export function ScoreView({
         },
       ],
     });
-
-    void (async () => {
-      await osmd.load(musicXml);
-      if (disposed) {
-        return;
-      }
-      osmd.render();
-      if (disposed) {
-        return;
-      }
-      osmdRef.current = osmd;
-      cursorStopsRef.current = collectCursorStops(osmd);
-      cursorIndexRef.current = 0;
-      osmd.cursor.hide();
-      cleanups = attachNoteHandlers(osmd, (frequency) => {
-        onNoteClickRef.current?.(frequency);
-      });
-    })();
+    osmdRef.current = osmd;
 
     return () => {
-      disposed = true;
-      for (const cleanup of cleanups) {
+      loadTokenRef.current += 1;
+      for (const cleanup of noteCleanupsRef.current) {
         cleanup();
       }
+      noteCleanupsRef.current = [];
       osmdRef.current = null;
       osmd.clear();
     };
+  }, []);
+
+  /** 楽譜が変わったら読み直して描き直す */
+  useEffect(() => {
+    const osmd = osmdRef.current;
+    if (osmd === null) {
+      return;
+    }
+    const token = loadTokenRef.current + 1;
+    loadTokenRef.current = token;
+
+    void (async () => {
+      try {
+        await osmd.load(musicXml);
+        if (loadTokenRef.current !== token) {
+          return;
+        }
+        osmd.render();
+      } catch {
+        // 読み込み中に破棄された場合など。新しい世代が描き直す
+        return;
+      }
+      if (loadTokenRef.current !== token) {
+        return;
+      }
+
+      for (const cleanup of noteCleanupsRef.current) {
+        cleanup();
+      }
+      noteCleanupsRef.current = attachNoteHandlers(osmd, (frequency) => {
+        onNoteClickRef.current?.(frequency);
+      });
+      cursorStopsRef.current = collectCursorStops(osmd);
+      cursorIndexRef.current = 0;
+      osmd.cursor.hide();
+    })();
   }, [musicXml]);
 
   useEffect(() => {
@@ -199,7 +228,12 @@ export function ScoreView({
     if (osmd === null) {
       return;
     }
-    const cursor = osmd.cursor;
+    // カーソルは render() が走るまで作られない。OSMD の生成と描画を別の
+    // 効果に分けているので、描画前にここへ来ることがある
+    const cursor: Cursor | undefined = osmd.cursor;
+    if (!cursor) {
+      return;
+    }
 
     if (playbackPosition === null || playbackPosition === undefined) {
       if (!cursor.Hidden) {
