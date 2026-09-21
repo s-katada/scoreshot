@@ -1,0 +1,4 @@
+# gl は opensheetmusicdisplay が Node 側で楽譜を画像化するときに使う
+# headless WebGL。ブラウザ/WebView では使わないのでビルドしない。
+ignoredBuiltDependencies:
+  - gl
