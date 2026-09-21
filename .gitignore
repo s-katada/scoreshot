@@ -11,5 +11,5 @@ node_modules/
 dist/
 
 # Tauri
-src-tauri/target/
-src-tauri/gen/
+# target と gen/schemas は src-tauri/.gitignore 側で無視される。
+# gen/apple は Info.plist などの設定を含むためコミットする。
