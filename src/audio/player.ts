@@ -76,23 +76,53 @@ export function scoreQuarterLength(score: Score): number {
 }
 
 /**
- * 音色。
+ * 音色。Salamander Grand Piano の実音サンプルを鳴らす。
  *
- * Phase 1 は合成音で鳴らしている。サンプル音源 (Salamander など) に
- * 差し替える余地を残すため、楽器の生成をここに閉じ込めて外には
- * Tone の型を出していない。
+ * 88 鍵ぶんのファイルは持たず、短 3 度おきの 30 音だけを同梱している。
+ * 間の音は Tone.Sampler が近いサンプルからピッチシフトで作るので、
+ * 2MB 弱で全域が鳴り、オフラインでも動く。
+ * 出典と license は public/samples/piano/NOTICE.md を参照。
  */
-let instrument: Tone.PolySynth | null = null;
+const SAMPLE_BASE_URL = "/samples/piano/";
 
-function getInstrument(): Tone.PolySynth {
-  if (instrument === null) {
-    instrument = new Tone.PolySynth(Tone.Synth, {
-      oscillator: { type: "triangle" },
-      envelope: { attack: 0.005, decay: 0.4, sustain: 0.15, release: 1.4 },
-    }).toDestination();
-    instrument.volume.value = -8;
+/** ファイル名に # は使えないため Ds / Fs と綴られている */
+const SAMPLE_URLS: Record<string, string> = {
+  A0: "A0.mp3",
+  C1: "C1.mp3", "D#1": "Ds1.mp3", "F#1": "Fs1.mp3", A1: "A1.mp3",
+  C2: "C2.mp3", "D#2": "Ds2.mp3", "F#2": "Fs2.mp3", A2: "A2.mp3",
+  C3: "C3.mp3", "D#3": "Ds3.mp3", "F#3": "Fs3.mp3", A3: "A3.mp3",
+  C4: "C4.mp3", "D#4": "Ds4.mp3", "F#4": "Fs4.mp3", A4: "A4.mp3",
+  C5: "C5.mp3", "D#5": "Ds5.mp3", "F#5": "Fs5.mp3", A5: "A5.mp3",
+  C6: "C6.mp3", "D#6": "Ds6.mp3", "F#6": "Fs6.mp3", A6: "A6.mp3",
+  C7: "C7.mp3", "D#7": "Ds7.mp3", "F#7": "Fs7.mp3", A7: "A7.mp3",
+  C8: "C8.mp3",
+};
+
+let instrument: Tone.Sampler | null = null;
+let instrumentLoading: Promise<Tone.Sampler> | null = null;
+
+/**
+ * 音源を読み込む。
+ *
+ * 音を鳴らすにはユーザー操作が要るが、読み込み自体には要らない。
+ * 起動時に呼んでおけば最初の再生が待たされずに済む。
+ */
+export function loadInstrument(): Promise<Tone.Sampler> {
+  if (instrumentLoading === null) {
+    instrumentLoading = new Promise<Tone.Sampler>((resolve, reject) => {
+      const sampler = new Tone.Sampler({
+        urls: SAMPLE_URLS,
+        baseUrl: SAMPLE_BASE_URL,
+        // 鍵盤を離したあとの余韻
+        release: 1,
+        onload: () => resolve(sampler),
+        onerror: (error) => reject(error),
+      }).toDestination();
+      sampler.volume.value = -4;
+      instrument = sampler;
+    });
   }
-  return instrument;
+  return instrumentLoading;
 }
 
 /**
@@ -141,7 +171,7 @@ export async function play(score: Score, onEnded?: () => void): Promise<void> {
   const transport = Tone.getTransport();
   transport.bpm.value = score.tempo;
 
-  const synth = getInstrument();
+  const synth = await loadInstrument();
   // テンポは曲中で変わらない前提。曲中のテンポ変更に対応するときは
   // ここを Tone の拍表記に置き換える。
   const secondsPerQuarter = 60 / score.tempo;
@@ -173,6 +203,6 @@ export async function play(score: Score, onEnded?: () => void): Promise<void> {
  * "C4" のような音名と、周波数 (Hz) の数値のどちらでも受ける。
  */
 export async function playNote(note: string | number): Promise<void> {
-  await ensureAudioReady();
-  getInstrument().triggerAttackRelease(note, 0.6);
+  const [sampler] = await Promise.all([loadInstrument(), ensureAudioReady()]);
+  sampler.triggerAttackRelease(note, 1.2);
 }
