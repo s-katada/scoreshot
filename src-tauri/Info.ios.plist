@@ -4,10 +4,19 @@
 <dict>
 	<!--
 	  iOS 27 SDK (Xcode 27) でビルドしたアプリは UIScene ライフサイクルの
-	  採用が必須になった。宣言が無いと起動時に SIGTRAP で即死する:
+	  採用が必須になった。宣言が無いと起動直後に SIGTRAP で落ちる:
 	    Application failed to launch: UIScene life cycle is required
 	    for apps built with this SDK.
-	  Tauri が生成する Info.plist には入らないため、ここで補う。
+
+	  この宣言でプロセスは常駐し、WebView もフロントエンドを読み込んで
+	  描画を完了する (ログに DidFirstMeaningfulPaint が出る) が、
+	  ウィンドウがシーンに接続されないため画面には何も出ない。
+
+	  UISceneDelegateClassName に tao の TaoSceneDelegate を指定する案は
+	  失敗した。objc2 はクラスを実行時に登録するため、UIKit が
+	  UIApplicationMain の初期化中に Info.plist を読む時点ではまだ
+	  クラスが存在せず "could not load class" になる。
+	  解決には wry/tao 側の対応が必要。
 	-->
 	<key>UIApplicationSceneManifest</key>
 	<dict>
