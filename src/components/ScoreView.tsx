@@ -114,11 +114,12 @@ export function ScoreView({ musicXml, onNoteClick }: ScoreViewProps) {
     };
   }, [musicXml]);
 
-  // 楽譜は紙の見立てなので、配色に関わらず白地に黒で描く
+  // 楽譜は紙の見立てなので、配色に関わらず白地に黒で描く。
+  // OSMD が幅を測る要素には padding を置かない。padding ぶんまで
+  // 描画幅に使われて横にはみ出すため、外側の枠と分けている。
   return (
-    <div
-      ref={containerRef}
-      className="w-full overflow-x-auto rounded-lg bg-white p-4 text-black shadow-sm"
-    />
+    <div className="w-full overflow-x-auto rounded-lg bg-white p-4 text-black shadow-sm">
+      <div ref={containerRef} className="w-full" />
+    </div>
   );
 }
