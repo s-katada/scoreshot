@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { staffEvents, type StaffEvent } from "../../src/model/edit";
 import { scoreToMusicXml } from "../../src/model/musicxml";
 import { MusicXmlImportError, parseMusicXml } from "../../src/model/musicxmlImport";
+import { readMusicXmlFile } from "../../src/model/musicxmlFile";
+import { strToU8, zipSync } from "fflate";
 import { createEmptyScore } from "../../src/model/newScore";
 import { sampleScore } from "../../src/model/sample";
 import { pitchToName, type Score, type StaffNumber } from "../../src/model/score";
@@ -109,3 +111,32 @@ const oneStaffBass = parseMusicXml(wrap(measure(quarterC.repeat(4), "<attributes
 check("1 段のヘ音記号の楽譜は下段へ", describeStaff(oneStaffBass.score, 0, 2).startsWith("C4:quarter@0") && describeStaff(oneStaffBass.score, 0, 1) === "rest:whole@0");
 const noTime = parseMusicXml(wrap(`<measure number="1"><attributes><divisions>1</divisions></attributes>${quarterC.repeat(4)}</measure>`));
 check("拍子が無ければ 4/4 として注意", noTime.score.time.beats === 4 && noTime.warnings.some((w) => w.includes("4/4")));
+
+section("MusicXML のファイル");
+{
+  const xml = scoreToMusicXml(sampleScore);
+  const plain = readMusicXmlFile("きらきら.musicxml", new TextEncoder().encode(xml));
+  check("非圧縮", shape(plain.score) === shape(sampleScore));
+
+  const container = `<?xml version="1.0" encoding="UTF-8"?><container><rootfiles><rootfile full-path="score.xml" media-type="application/vnd.recordare.musicxml+xml"/></rootfiles></container>`;
+  const mxl = zipSync({ "META-INF/container.xml": strToU8(container), "score.xml": strToU8(xml), mimetype: strToU8("application/vnd.recordare.musicxml") });
+  const compressed = readMusicXmlFile("きらきら.mxl", mxl);
+  check("圧縮 (.mxl)", shape(compressed.score) === shape(sampleScore));
+  const noContainer = readMusicXmlFile("x.mxl", zipSync({ "inner/song.musicxml": strToU8(xml) }));
+  check("目録の無い .mxl", shape(noContainer.score) === shape(sampleScore));
+  checkThrows("壊れた .mxl", () => readMusicXmlFile("x.mxl", new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3])), ".mxl");
+
+  // UTF-16 (BOM 付き) の MusicXML
+  const utf16 = new Uint8Array(2 + xml.length * 2);
+  utf16[0] = 0xff;
+  utf16[1] = 0xfe;
+  for (let i = 0; i < xml.length; i++) {
+    const code = xml.charCodeAt(i);
+    utf16[2 + i * 2] = code & 0xff;
+    utf16[3 + i * 2] = code >> 8;
+  }
+  check("UTF-16 の MusicXML", shape(readMusicXmlFile("u.musicxml", utf16).score) === shape(sampleScore));
+
+  const untitled = scoreToMusicXml({ ...sampleScore, title: "" }).replace(/<work>[\s\S]*?<\/work>/, "");
+  check("題名が無ければファイル名 (拡張子なし)", readMusicXmlFile("月の光.mxl.musicxml", strToU8(untitled)).score.title === "月の光.mxl");
+}
