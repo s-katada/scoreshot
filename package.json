@@ -15,7 +15,8 @@
     "omr:corpus": "vite build -c vite.scripts.config.ts --ssr scripts/omr/make-corpus.ts --outDir .tmp-omr/corpus && node .tmp-omr/corpus/make-corpus.js",
     "omr:degrade": "vite build -c vite.scripts.config.ts --ssr scripts/omr/degrade.ts --outDir .tmp-omr/degrade && node .tmp-omr/degrade/degrade.js",
     "omr:evaluate": "vite build -c vite.scripts.config.ts --ssr scripts/omr/evaluate.ts --outDir .tmp-omr/evaluate && node .tmp-omr/evaluate/evaluate.js",
-    "omr:inspect": "vite build -c vite.scripts.config.ts --ssr scripts/omr/inspect.ts --outDir .tmp-omr/inspect && node .tmp-omr/inspect/inspect.js"
+    "omr:inspect": "vite build -c vite.scripts.config.ts --ssr scripts/omr/inspect.ts --outDir .tmp-omr/inspect && node .tmp-omr/inspect/inspect.js",
+    "omr:fixture": "vite build -c vite.scripts.config.ts --ssr scripts/omr/make-fixture.ts --outDir .tmp-omr/fixture && node .tmp-omr/fixture/make-fixture.js"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",

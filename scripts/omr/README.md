@@ -42,3 +42,15 @@ pnpm omr:inspect /tmp/seg/piece-01                                              
 | それを `omr:degrade` で写真のように崩したもの (傾き 0.8〜1.8°、150〜200dpi 相当) | 4 | 97.3% | 97.3% | 96.1% |
 
 作った楽譜はピアノ大譜表で、右手は旋律と時々の和音・休符・臨時記号、左手は和音と分散和音。装飾音符・連符・複数声部・タイ・スラーは入っていない (読めない)。実際の写真や手書きの楽譜ではもっと下がる。
+
+## pnpm check で使う材料
+
+`pnpm check` は、モデルを使わずに後処理を確かめるため、モデルの出力を段 1 つぶん保存したもの (`scripts/fixtures/omr/`) を読み、正解と突き合わせる。傾きに付いていけるかは、それを 1.5° 傾けて確かめる。後処理を変えたら `pnpm check` と上の認識率の両方を見る。
+
+作り直すとき (モデルや前処理を変えたときなど):
+
+```sh
+pnpm omr:fixture /tmp/seg/piece-01 /tmp/corpus/piece-01.json 0 scripts/fixtures/omr/piece-01-system1.bin.gz
+```
+
+`piece-01` は `pnpm omr:corpus` の既定の乱数の種 (1) で作ったもの。引数は segment-page の出力・正解・段の番号 (0 から)・出力先。
