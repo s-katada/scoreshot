@@ -136,6 +136,13 @@ export function useScoreEditor({ history, onSound }: Options) {
     [score, history],
   );
 
+  /** 選択とは関係のない編集 (タイトルや拍子など)。変えられたら true */
+  const editScore = useCallback(
+    (edit: (current: Score) => Score) =>
+      apply((current) => ({ score: edit(current), noteIds: [] })) !== null,
+    [apply],
+  );
+
   /** 選んだ音符に合わせてパレットの音価も揃える (長さを変えるときの起点になる) */
   const select = useCallback(
     (noteId: string | null) => {
@@ -337,6 +344,7 @@ export function useScoreEditor({ history, onSound }: Options) {
     hoverLabel,
     handleHit,
     handleHover: setHover,
+    editScore,
     moveSelection,
     toggleSelectedRest,
     deleteSelected,
