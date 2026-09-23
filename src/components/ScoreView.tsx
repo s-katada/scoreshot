@@ -86,6 +86,7 @@ interface StaveLike {
   getX(): number;
   getWidth(): number;
   getYForLine(line: number): number;
+  getNoteStartX(): number;
   getNoteEndX(): number;
 }
 
@@ -171,6 +172,7 @@ function buildLayout(
 
       const points = anchors.get(measureIndex) ?? [];
       anchors.set(measureIndex, points);
+      points.push({ time: 0, x: stave.getNoteStartX() });
       points.push({ time: measureLength, x: stave.getNoteEndX() });
 
       const events = staffEvents(modelMeasure, staff);
@@ -180,12 +182,15 @@ function buildLayout(
           (v) => v.notes,
         );
         const first = graphical[0] as unknown as VexFlowNoteLike | undefined;
+        const event = events.find((e) => Math.abs(e.onset - time) < 1e-6);
         const x = first?.vfnote?.[0].getAbsoluteX();
-        if (x !== undefined) {
+        // 小節まるごとの休符は小節の真ん中に描かれるので、時刻の目安にしない
+        const wholeRest =
+          event !== undefined && isRestEvent(event) && event.length >= measureLength;
+        if (x !== undefined && !wholeRest) {
           points.push({ time, x });
         }
 
-        const event = events.find((e) => Math.abs(e.onset - time) < 1e-6);
         if (event === undefined || first === undefined) {
           continue;
         }
