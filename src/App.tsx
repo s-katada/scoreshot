@@ -143,7 +143,7 @@ export default function App() {
   const replaceScore = useCallback(
     (next: Score) => {
       stopPlayback();
-      editor.select(null);
+      editor.clearSelection();
       history.update(() => next);
     },
     [history, editor, stopPlayback],
