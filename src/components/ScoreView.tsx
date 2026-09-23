@@ -63,6 +63,8 @@ interface ScoreViewProps {
   onHit?: (hit: ScoreHit) => void;
   /** 楽譜の上でポインタを動かしたとき。外れたら null */
   onHover?: (hit: ScoreHit | null) => void;
+  /** 入力モードではクリックで音符が置かれることをカーソルで示す */
+  cursorStyle?: "default" | "crosshair";
 }
 
 /** 各段のいちばん上の線の高さ (幹音の通し番号)。ト音記号は F5、ヘ音記号は A3 */
@@ -364,6 +366,7 @@ export function ScoreView({
   selectedNoteIds = [],
   onHit,
   onHover,
+  cursorStyle = "default",
 }: ScoreViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
@@ -596,6 +599,7 @@ export function ScoreView({
     <div className="w-full overflow-x-auto rounded-lg bg-white p-4 text-black shadow-sm">
       <div
         className="relative w-full"
+        style={{ cursor: cursorStyle }}
         onClick={handleClick}
         onPointerMove={handlePointerMove}
         onPointerLeave={handlePointerLeave}

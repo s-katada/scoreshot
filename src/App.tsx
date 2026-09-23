@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Banner } from "./components/Banner";
 import { ConfirmButton } from "./components/ConfirmButton";
-import { ScoreView, type ScoreHit } from "./components/ScoreView";
+import { EditorToolbar } from "./components/EditorToolbar";
+import { ScoreView } from "./components/ScoreView";
 import { primaryButtonClass } from "./components/styles";
 import { loadInstrument, play, playNote, stop } from "./audio/player";
-import { locateNote } from "./model/edit";
+import { useScoreEditor } from "./editor/useScoreEditor";
 import { sampleScore } from "./model/sample";
-import { pitchToName, type Score } from "./model/score";
+import type { Score } from "./model/score";
+import { useHistory } from "./state/useHistory";
 import {
   loadSavedScore,
   useAutoSave,
@@ -28,8 +30,11 @@ function saveStatusLabel(status: SaveStatus): string {
 }
 
 export default function App() {
-  // 楽譜そのもの。描画・再生・保存はすべてここから生やす
-  const [score, setScore] = useState<Score>(sampleScore);
+  // 楽譜そのもの。描画・再生・保存はすべてここから生やす。
+  // 編集のたびにスナップショットを積み、Undo/Redo で行き来する
+  const history = useHistory<Score>(sampleScore);
+  const score = history.value;
+  const resetHistory = history.reset;
   // 起動時の復元結果。null の間は読み込み中
   const [loaded, setLoaded] = useState<LoadedScore | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -63,14 +68,14 @@ export default function App() {
       if (cancelled) {
         return;
       }
-      setScore(result.score);
+      resetHistory(result.score);
       setLoaded(result);
       setLoadError(result.error ?? null);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [resetHistory]);
 
   const saveStatus = useAutoSave(
     loaded === null ? null : score,
@@ -83,10 +88,15 @@ export default function App() {
   }, [score.tempo]);
 
   const commitTempo = useCallback(() => {
-    setScore((current) =>
+    history.update((current) =>
       current.tempo === tempoInput ? current : { ...current, tempo: tempoInput },
     );
-  }, [tempoInput]);
+  }, [history, tempoInput]);
+
+  const editor = useScoreEditor({
+    history,
+    onSound: (name) => void playNote(name),
+  });
 
   const handlePlay = useCallback(async () => {
     if (playing) {
@@ -106,23 +116,12 @@ export default function App() {
     });
   }, [playing, score]);
 
-  // 音符をクリックしたら、その音だけ鳴らす
-  const handleHit = useCallback(
-    (hit: ScoreHit) => {
-      const pitch = hit.noteId === null ? null : locateNote(score, hit.noteId)?.note.pitch;
-      if (pitch) {
-        void playNote(pitchToName(pitch));
-      }
-    },
-    [score],
-  );
-
   const resetToSample = useCallback(() => {
     stop();
     setPlaying(false);
     setPosition(null);
-    setScore(sampleScore);
-  }, []);
+    history.update(() => sampleScore);
+  }, [history]);
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-4xl flex-col gap-6 px-4 py-8">
@@ -185,16 +184,18 @@ export default function App() {
       {loaded === null ? (
         <p className="text-sm opacity-60">楽譜を読み込み中…</p>
       ) : (
-        <ScoreView
-          score={score}
-          playbackPosition={position}
-          onHit={handleHit}
-        />
+        <>
+          <EditorToolbar editor={editor} />
+          <ScoreView
+            score={score}
+            playbackPosition={position}
+            selectedNoteIds={editor.selectedIds}
+            onHit={editor.handleHit}
+            onHover={editor.handleHover}
+            cursorStyle={editor.mode === "input" ? "crosshair" : "default"}
+          />
+        </>
       )}
-
-      <p className="text-sm opacity-50">
-        再生すると縦線が今の位置を示す。音符をクリックするとその音だけ鳴る。
-      </p>
     </main>
   );
 }
