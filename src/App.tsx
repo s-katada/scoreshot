@@ -3,13 +3,15 @@ import { ScoreView } from "./components/ScoreView";
 import { loadInstrument, play, playNote, stop } from "./audio/player";
 import { scoreToMusicXml } from "./model/musicxml";
 import { sampleScore } from "./model/sample";
+import type { Score } from "./model/score";
 
 export default function App() {
+  // 楽譜そのもの。描画・再生・保存はすべてここから生やす
+  const [score, setScore] = useState<Score>(sampleScore);
   // スライダーを動かしている間の値と、楽譜に反映する値を分けている。
   // テンポは MusicXML のメトロノーム記号に載るため、確定させずに反映すると
   // つまみを動かすたびに OSMD の再レイアウトが走ってしまう。
-  const [tempoInput, setTempoInput] = useState(sampleScore.tempo);
-  const [tempo, setTempo] = useState(sampleScore.tempo);
+  const [tempoInput, setTempoInput] = useState(score.tempo);
   const [playing, setPlaying] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
   // 再生位置 (四分音符単位)。null は停止中
@@ -29,7 +31,17 @@ export default function App() {
     };
   }, []);
 
-  const score = useMemo(() => ({ ...sampleScore, tempo }), [tempo]);
+  // 楽譜が差し替わったとき (復元・編集など) はスライダーを追従させる
+  useEffect(() => {
+    setTempoInput(score.tempo);
+  }, [score.tempo]);
+
+  const commitTempo = useCallback(() => {
+    setScore((current) =>
+      current.tempo === tempoInput ? current : { ...current, tempo: tempoInput },
+    );
+  }, [tempoInput]);
+
   const musicXml = useMemo(() => scoreToMusicXml(score), [score]);
 
   const handlePlay = useCallback(async () => {
@@ -80,8 +92,8 @@ export default function App() {
             step={1}
             value={tempoInput}
             onChange={(e) => setTempoInput(Number(e.target.value))}
-            onPointerUp={() => setTempo(tempoInput)}
-            onKeyUp={() => setTempo(tempoInput)}
+            onPointerUp={commitTempo}
+            onKeyUp={commitTempo}
             className="w-40"
           />
           <span className="w-16 tabular-nums opacity-60">
