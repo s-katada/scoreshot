@@ -19,3 +19,6 @@ dist/
 
 # OMR のモデル (pnpm omr:models で取ってくる。100MB を超えるので git には入れない)
 /public/models/*.onnx
+
+# OMR の開発用スクリプトの中間生成物
+.tmp-omr/
