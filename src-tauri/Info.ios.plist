@@ -8,15 +8,13 @@
 	    Application failed to launch: UIScene life cycle is required
 	    for apps built with this SDK.
 
-	  この宣言でプロセスは常駐し、WebView もフロントエンドを読み込んで
-	  描画を完了する (ログに DidFirstMeaningfulPaint が出る) が、
-	  ウィンドウがシーンに接続されないため画面には何も出ない。
+	  tao 0.35.3 はこの宣言があっても UIApplicationSupportsMultipleScenes が
+	  false だとウィンドウをシーンにつながず、画面に何も出なかった (#7)。
+	  tao 0.37 で直ったものを src-tauri/patches/tao に持ち込んで使っている
+	  (Tauri 2 系は tao 0.35 のため)。
 
-	  UISceneDelegateClassName に tao の TaoSceneDelegate を指定する案は
-	  失敗した。objc2 はクラスを実行時に登録するため、UIKit が
-	  UIApplicationMain の初期化中に Info.plist を読む時点ではまだ
-	  クラスが存在せず "could not load class" になる。
-	  解決には wry/tao 側の対応が必要。
+	  UISceneDelegateClassName は書かない。tao がシーンの設定を問われたときに
+	  TaoSceneDelegate を実行時に割り当てる。
 	-->
 	<!-- 楽譜をカメラで撮って読み取る (#2)。無いとカメラを使おうとした時点で落とされる -->
 	<key>NSCameraUsageDescription</key>
