@@ -633,3 +633,45 @@ export function setTimeSignature(score: Score, time: Score["time"]): Score {
   });
   return { ...score, time: { ...time }, measures };
 }
+
+/** 外から読み込んだ音 (MusicXML など)。pitches が null なら休符 */
+export interface ImportedEvent {
+  onset: number;
+  duration: Duration;
+  pitches: Pitch[] | null;
+}
+
+/**
+ * 段ごとの音の並びから小節を組み立てる。休符は捨てて埋め直す。
+ * 音が重なっていたり、小節からはみ出したりしていたら EditError を投げる。
+ */
+export function measureFromEvents(
+  time: Score["time"],
+  staves: Record<StaffNumber, ImportedEvent[]>,
+): Measure {
+  const measureLength = measureQuarterLength(time);
+  let measure: Measure = { id: createId(), notes: [] };
+  for (const staff of [1, 2] as StaffNumber[]) {
+    const sounding: StaffEvent[] = [];
+    const sorted = staves[staff]
+      .filter((e) => e.pitches !== null && e.pitches.length > 0)
+      .sort((a, b) => a.onset - b.onset);
+    let previousEnd = 0;
+    for (const event of sorted) {
+      const length = durationLength(event.duration);
+      if (event.onset < previousEnd - EPSILON) {
+        throw new EditError(`${staff === 1 ? "上段" : "下段"}で音が重なっています`);
+      }
+      if (event.onset + length > measureLength + EPSILON) {
+        throw new EditError(`${staff === 1 ? "上段" : "下段"}の音が小節からはみ出しています`);
+      }
+      const notes = sortedUnique(event.pitches as Pitch[]).map((pitch, i) =>
+        makeNote(createId(), pitch, event.duration, staff, i > 0),
+      );
+      sounding.push({ onset: event.onset, length, notes });
+      previousEnd = event.onset + length;
+    }
+    measure = withStaff(measure, staff, fillStaff(sounding, staff, time));
+  }
+  return measure;
+}
