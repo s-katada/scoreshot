@@ -27,6 +27,7 @@ import {
   setEventDuration,
   setNotePitch,
   snapOnset,
+  staffEvents,
   toggleRest,
   type EditResult,
   type StaffPosition,
@@ -40,12 +41,14 @@ import {
   withAlter,
 } from "../model/pitch";
 import {
+  measureQuarterLength,
   pitchToName,
   type Alter,
   type NoteType,
   type Pitch,
   type Score,
   type StaffNumber,
+  type Step,
 } from "../model/score";
 import type { History } from "../state/useHistory";
 
@@ -80,6 +83,43 @@ function beatLabel(onset: number, beatType: number): string {
   return `${Number.isInteger(beat) ? beat : beat.toFixed(2).replace(/0+$/, "")} 拍目`;
 }
 
+/**
+ * 幹音名 step の音のうち、reference にいちばん近いもの (キーボード入力用)。
+ * 高さの変化は調号に従わせる。
+ */
+function pitchNear(step: Step, reference: Pitch, fifths: number): Pitch {
+  const base = diatonicNumber(reference);
+  let best = diatonicNumber({ step, octave: reference.octave });
+  for (const octave of [reference.octave - 1, reference.octave + 1]) {
+    const candidate = diatonicNumber({ step, octave });
+    if (Math.abs(candidate - base) < Math.abs(best - base)) {
+      best = candidate;
+    }
+  }
+  return pitchFromDiatonic(clampDiatonic(best), fifths);
+}
+
+/** 幹音名 step の音のうち、reference より上でいちばん近いもの (和音を積む用) */
+function pitchAbove(step: Step, reference: Pitch, fifths: number): Pitch {
+  let candidate = diatonicNumber({ step, octave: reference.octave });
+  while (candidate <= diatonicNumber(reference)) {
+    candidate += 7;
+  }
+  return pitchFromDiatonic(clampDiatonic(candidate), fifths);
+}
+
+/**
+ * position から length だけ進んだ位置。小節の終わりに届いたら次の小節の頭
+ * (最後の小節なら、まだ無い次の小節を指す。そこへ置くときに小節を足す)
+ */
+function positionAfter(score: Score, position: StaffPosition, length: number): StaffPosition {
+  const end = position.onset + length;
+  if (end < measureQuarterLength(score.time) - 1e-9) {
+    return { ...position, onset: end };
+  }
+  return { measureIndex: position.measureIndex + 1, staff: position.staff, onset: 0 };
+}
+
 interface Options {
   history: History<Score>;
   /** 置いた音・選んだ音を鳴らす */
@@ -96,6 +136,13 @@ export function useScoreEditor({ history, onSound }: Options) {
     chord: false,
   });
   const [selection, setSelection] = useState<string | null>(null);
+  /**
+   * キーボードで音を置く位置 (入力カーソル)。音符をタップして選ぶとその
+   * 音の位置に、音を置くと置いた音の後ろに移る (MuseScore と同じ)
+   */
+  const [cursor, setCursor] = useState<StaffPosition | null>(null);
+  /** 最後に置いた・選んだ音。キーボードで置く音のオクターブを決めるのに使う */
+  const [lastPitch, setLastPitch] = useState<Pitch | null>(null);
   const [hover, setHover] = useState<ScoreHit | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -109,6 +156,7 @@ export function useScoreEditor({ history, onSound }: Options) {
     (pitch: Pitch | null) => {
       if (pitch !== null) {
         onSound?.(pitchToName(pitch));
+        setLastPitch(pitch);
       }
     },
     [onSound],
@@ -146,7 +194,10 @@ export function useScoreEditor({ history, onSound }: Options) {
     [apply],
   );
 
-  /** 選んだ音符に合わせてパレットの音価も揃える (長さを変えるときの起点になる) */
+  /**
+   * 音符を選ぶ。パレットの音価も選んだ音に揃え (長さを変えるときの起点に
+   * なる)、入力カーソルを選んだ音の位置に置く (キーボードで上書きできる)。
+   */
   const select = useCallback(
     (noteId: string | null) => {
       setSelection(noteId);
@@ -154,11 +205,31 @@ export function useScoreEditor({ history, onSound }: Options) {
       if (location !== null) {
         const { type, dots } = location.note;
         setPalette((p) => ({ ...p, type, dots: dots ?? 0 }));
+        setCursor({
+          measureIndex: location.measureIndex,
+          staff: location.staff,
+          onset: location.event.onset,
+        });
       }
       return location;
     },
     [score],
   );
+
+  /** 選択と入力カーソルを捨てる (楽譜を丸ごと差し替えたときなど) */
+  const clearSelection = useCallback(() => {
+    setSelection(null);
+    setCursor(null);
+  }, []);
+
+  /** 置いた音の後ろに入力カーソルを進める */
+  const advanceCursor = useCallback((result: EditResult) => {
+    const location = result.noteIds[0] && locateNote(result.score, result.noteIds[0]);
+    if (location) {
+      const at = { measureIndex: location.measureIndex, staff: location.staff, onset: location.event.onset };
+      setCursor(positionAfter(result.score, at, location.event.length));
+    }
+  }, []);
 
   /** 五線上の点を、音符を置く位置と高さに直す */
   const target = useCallback(
@@ -200,11 +271,104 @@ export function useScoreEditor({ history, onSound }: Options) {
             ? addChordNote(current, position, pitch, duration)
             : placeNotes(current, position, [pitch], duration),
       );
-      if (result !== null && !palette.rest) {
+      if (result !== null) {
+        advanceCursor(result);
+        if (!palette.rest) {
+          sound(pitch);
+        }
+      }
+    },
+    [mode, palette, target, apply, select, sound, advanceCursor],
+  );
+
+  /** 入力カーソルの位置。無ければ選んでいる音、それも無ければ曲の頭 */
+  const inputPosition = useCallback((): StaffPosition => {
+    if (cursor !== null) {
+      return cursor;
+    }
+    if (selected !== null) {
+      return { measureIndex: selected.measureIndex, staff: selected.staff, onset: selected.event.onset };
+    }
+    return { measureIndex: 0, staff: 1, onset: 0 };
+  }, [cursor, selected]);
+
+  /**
+   * 入力カーソルの位置に音 (pitch が null なら休符) を置き、カーソルを進める。
+   * カーソルが最後の小節の後ろを指していたら小節を足す。
+   */
+  const placeAtCursor = useCallback(
+    (pitch: Pitch | null) => {
+      const position = inputPosition();
+      const duration = { type: palette.type, dots: palette.dots };
+      const result = apply((current) => {
+        const base =
+          position.measureIndex >= current.measures.length
+            ? insertMeasure(current, current.measures.length)
+            : current;
+        return placeNotes(base, position, pitch === null ? null : [pitch], duration);
+      });
+      if (result !== null) {
+        advanceCursor(result);
         sound(pitch);
       }
     },
-    [mode, palette, target, apply, select, sound],
+    [inputPosition, palette.type, palette.dots, apply, advanceCursor, sound],
+  );
+
+  /**
+   * キーボードの音名 (A〜G) で音を置く。オクターブは直前の音にいちばん近い
+   * ものを選ぶ (MuseScore と同じ)。asChord なら選んでいる音の上に和音を積む。
+   */
+  const typeNote = useCallback(
+    (step: Step, asChord: boolean) => {
+      if (asChord) {
+        if (selected === null || selected.note.pitch === null) {
+          return;
+        }
+        const top = selected.event.notes
+          .map((n) => n.pitch as Pitch)
+          .reduce((a, b) => (diatonicNumber(b) > diatonicNumber(a) ? b : a));
+        const pitch = pitchAbove(step, top, score.key.fifths);
+        const position = { measureIndex: selected.measureIndex, staff: selected.staff, onset: selected.event.onset };
+        const duration = { type: selected.note.type, dots: selected.note.dots ?? 0 };
+        const result = apply((current) => addChordNote(current, position, pitch, duration));
+        if (result !== null) {
+          sound(pitch);
+        }
+        return;
+      }
+      const position = inputPosition();
+      const reference =
+        lastPitch ?? pitchFromDiatonic(MIDDLE_LINE[position.staff], score.key.fifths);
+      placeAtCursor(pitchNear(step, reference, score.key.fifths));
+    },
+    [selected, score.key.fifths, apply, sound, inputPosition, lastPitch, placeAtCursor],
+  );
+
+  const typeRest = useCallback(() => placeAtCursor(null), [placeAtCursor]);
+
+  /** 同じ段の前後の音 (休符含む) へ選択を動かす。小節をまたいで動く */
+  const moveSelectionSideways = useCallback(
+    (delta: number) => {
+      const staff = selected?.staff ?? cursor?.staff ?? 1;
+      const events = score.measures.flatMap((measure, measureIndex) =>
+        staffEvents(measure, staff).map((event) => ({ measureIndex, event })),
+      );
+      if (events.length === 0) {
+        return;
+      }
+      const index =
+        selected === null
+          ? -1
+          : events.findIndex((e) => e.event.notes.some((n) => n.id === selected.note.id));
+      const nextIndex =
+        index === -1 ? (delta > 0 ? 0 : events.length - 1) : index + delta;
+      const next = events[Math.max(0, Math.min(events.length - 1, nextIndex))];
+      const location = select(next.event.notes[0].id);
+      setMessage(null);
+      sound(location?.note.pitch ?? null);
+    },
+    [selected, cursor, score, select, sound],
   );
 
   const ghost = useMemo<GhostNote | null>(() => {
@@ -365,6 +529,11 @@ export function useScoreEditor({ history, onSound }: Options) {
     selected,
     selectedIds,
     select,
+    clearSelection,
+    cursor,
+    typeNote,
+    typeRest,
+    moveSelectionSideways,
     message,
     dismissMessage: () => setMessage(null),
     ghost,
