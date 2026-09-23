@@ -1,78 +1,12 @@
 /**
- * 開いている楽譜をローカルに保存し、次回起動時に復元する。
+ * 開いている楽譜を自動で保存する。
  */
 
-import { useEffect, useRef, useState } from "react";
-import { sampleScore } from "../model/sample";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Score } from "../model/score";
-import { parseScoreFile, serializeScore } from "./scoreFile";
 import { describeError } from "../util/errors";
+import { serializeScore } from "./scoreFile";
 import { getTextStore } from "./textStore";
-
-const FILE_NAME = "score.json";
-/** 読み込めなかったファイルの退避先。次の保存で上書きされて消えないように */
-const BROKEN_FILE_NAME = "score.broken.json";
-
-export interface LoadedScore {
-  score: Score;
-  /** 保存済みの楽譜を復元できたら true。サンプルを出したら false */
-  restored: boolean;
-  /** 保存済みの楽譜があったのに読み込めなかったときの説明 */
-  error?: string;
-  /**
-   * ファイルの中身が score と一致しているか。壊れたファイルを退避して
-   * サンプルを出したときは false になり、次の自動保存でサンプルが書かれる
-   * (毎回の起動で同じエラーが出続けないように)
-   */
-  inSync: boolean;
-}
-
-/**
- * 保存済みの楽譜を読み込む。無ければサンプルを返す。
- *
- * 壊れていたらサンプルにフォールバックし、その旨を error で伝える。
- * 壊れたファイルは別名で退避しておく (次の自動保存で上書きされないように)。
- */
-export async function loadSavedScore(): Promise<LoadedScore> {
-  const store = getTextStore();
-  let text: string | null;
-  try {
-    text = await store.read(FILE_NAME);
-  } catch (error) {
-    // 読めなかっただけでファイルは無事かもしれないので、上書きしない
-    return {
-      score: sampleScore,
-      restored: false,
-      error: `保存された楽譜を読み込めませんでした。\n${describeError(error)}`,
-      inSync: true,
-    };
-  }
-  if (text === null) {
-    return { score: sampleScore, restored: false, inSync: false };
-  }
-
-  try {
-    return { score: parseScoreFile(text), restored: true, inSync: true };
-  } catch (error) {
-    let backedUp = false;
-    try {
-      await store.write(BROKEN_FILE_NAME, text);
-      backedUp = true;
-    } catch {
-      // 退避に失敗しても、サンプルを出すこと自体は続ける
-    }
-    const backup = backedUp
-      ? `\n元のファイルは ${BROKEN_FILE_NAME} に退避しました。`
-      : "";
-    return {
-      score: sampleScore,
-      restored: false,
-      error: `保存された楽譜が壊れていたため、サンプルを表示しています。\n${describeError(error)}${backup}`,
-      // 退避できなかったときは、編集されるまで元のファイルに触らない
-      inSync: !backedUp,
-    };
-  }
-}
 
 export type SaveStatus =
   | { state: "idle" }
@@ -83,11 +17,21 @@ export type SaveStatus =
 /** 変更が落ち着いてから書き込むまでの待ち時間 */
 const SAVE_DELAY_MS = 300;
 
+export interface AutoSave {
+  status: SaveStatus;
+  /**
+   * 待っている書き込みがあれば今すぐ書き、書き終わるのを待つ。
+   * 別の楽譜に切り替える前に呼ぶ (待ち時間の間の編集を失わないように)。
+   */
+  flush: () => Promise<void>;
+}
+
 /**
- * 楽譜が変わるたびに自動で保存する。
+ * 楽譜が変わるたびに、ファイル target へ自動で保存する。
  *
- * baseline にはファイルに書かれていると分かっている楽譜を渡す (無ければ null)。
- * それと同じ内容のうちは書き込まない (起動しただけで保存が走らないように)。
+ * baseline にはファイルに書かれていると分かっている楽譜を渡す (無ければ
+ * null)。それと同じ内容のうちは書き込まない (開いただけで保存が走らない
+ * ように)。
  *
  * 書き込みは 1 本の列に並べて順に行う。前の書き込みが終わる前に次を
  * 始めると、遅れて終わった古い内容でファイルが上書きされうるため。
@@ -95,57 +39,81 @@ const SAVE_DELAY_MS = 300;
 export function useAutoSave(
   score: Score | null,
   baseline: Score | null,
-): SaveStatus {
+  target: string | null,
+): AutoSave {
   const [status, setStatus] = useState<SaveStatus>({ state: "idle" });
-  // ファイルに書かれているはずの内容
-  const savedRef = useRef<string | null>(null);
+  // ファイルごとに、書かれているはずの内容 (保存日時を除く)
+  const savedRef = useRef(new Map<string, string>());
   const queueRef = useRef<Promise<void>>(Promise.resolve());
   // 最後に積んだ書き込みの番号。古い書き込みの結果で表示を戻さないため
   const seqRef = useRef(0);
+  const pendingRef = useRef<{ target: string; score: Score; timer: number } | null>(null);
 
   useEffect(() => {
-    savedRef.current = baseline === null ? null : serializeScore(baseline);
-  }, [baseline]);
+    if (baseline !== null && target !== null) {
+      savedRef.current.set(target, serializeScore(baseline));
+    }
+  }, [baseline, target]);
+
+  const enqueue = useCallback((file: string, next: Score) => {
+    const text = serializeScore(next);
+    const seq = ++seqRef.current;
+    const isLatest = () => seq === seqRef.current;
+
+    queueRef.current = queueRef.current.then(async () => {
+      if (savedRef.current.get(file) === text) {
+        if (isLatest()) {
+          setStatus((s) => (s.state === "saving" ? { state: "saved" } : s));
+        }
+        return;
+      }
+      if (isLatest()) {
+        setStatus({ state: "saving" });
+      }
+      try {
+        await getTextStore().write(file, serializeScore(next, new Date()));
+        savedRef.current.set(file, text);
+        if (isLatest()) {
+          setStatus({ state: "saved" });
+        }
+      } catch (error) {
+        if (isLatest()) {
+          setStatus({
+            state: "error",
+            message: `楽譜を保存できませんでした。\n${describeError(error)}`,
+          });
+        }
+      }
+    });
+  }, []);
 
   useEffect(() => {
-    if (score === null) {
+    if (score === null || target === null) {
       return;
     }
-    const text = serializeScore(score);
-
     const timer = window.setTimeout(() => {
-      const seq = ++seqRef.current;
-      const isLatest = () => seq === seqRef.current;
-
-      queueRef.current = queueRef.current.then(async () => {
-        if (text === savedRef.current) {
-          if (isLatest()) {
-            setStatus((s) => (s.state === "saving" ? { state: "saved" } : s));
-          }
-          return;
-        }
-        if (isLatest()) {
-          setStatus({ state: "saving" });
-        }
-        try {
-          await getTextStore().write(FILE_NAME, text);
-          savedRef.current = text;
-          if (isLatest()) {
-            setStatus({ state: "saved" });
-          }
-        } catch (error) {
-          if (isLatest()) {
-            setStatus({
-              state: "error",
-              message: `楽譜を保存できませんでした。\n${describeError(error)}`,
-            });
-          }
-        }
-      });
+      pendingRef.current = null;
+      enqueue(target, score);
     }, SAVE_DELAY_MS);
+    pendingRef.current = { target, score, timer };
 
-    return () => window.clearTimeout(timer);
-  }, [score]);
+    return () => {
+      window.clearTimeout(timer);
+      if (pendingRef.current?.timer === timer) {
+        pendingRef.current = null;
+      }
+    };
+  }, [score, target, enqueue]);
 
-  return status;
+  const flush = useCallback(() => {
+    const pending = pendingRef.current;
+    if (pending !== null) {
+      window.clearTimeout(pending.timer);
+      pendingRef.current = null;
+      enqueue(pending.target, pending.score);
+    }
+    return queueRef.current;
+  }, [enqueue]);
+
+  return { status, flush };
 }
