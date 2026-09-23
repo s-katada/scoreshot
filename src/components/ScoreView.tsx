@@ -50,6 +50,13 @@ export interface ScoreHit {
   point: StaffPoint | null;
 }
 
+/** キーボードで音を置く位置 (入力カーソル) */
+export interface CaretPosition {
+  measureIndex: number;
+  staff: StaffNumber;
+  onset: number;
+}
+
 /** 入力モードで「ここに置かれる」を示す半透明の符頭 */
 export interface GhostNote {
   measureIndex: number;
@@ -68,6 +75,8 @@ interface ScoreViewProps {
   /** 色を付けて示す音符の id */
   selectedNoteIds?: readonly string[];
   ghost?: GhostNote | null;
+  /** 入力カーソルの位置に細い縦線を出す */
+  caret?: CaretPosition | null;
   /** 楽譜の上をクリック (タップ) したとき */
   onHit?: (hit: ScoreHit) => void;
   /** 楽譜の上でポインタを動かしたとき。外れたら null */
@@ -404,6 +413,7 @@ export function ScoreView({
   playbackPosition,
   selectedNoteIds = [],
   ghost = null,
+  caret = null,
   onHit,
   onHover,
   cursorStyle = "default",
@@ -667,6 +677,46 @@ export function ScoreView({
     // renderCount: 描き直すと座標が変わるので、そのたびに測り直す
   }, [ghost, renderCount]);
 
+  // 入力カーソルの縦線。最後の小節の後ろを指しているときは楽譜の右端に出す
+  const caretBox = useMemo<GhostBox | null>(() => {
+    const layout = layoutRef.current;
+    const overlay = overlayRef.current;
+    if (caret === null || layout === null || overlay === null || renderCount === 0) {
+      return null;
+    }
+    const matrix = layout.svg.getScreenCTM();
+    if (matrix === null) {
+      return null;
+    }
+    let staff = layout.staves.find(
+      (s) => s.measureIndex === caret.measureIndex && s.staff === caret.staff,
+    );
+    let x: number;
+    if (staff !== undefined) {
+      x = xAtTime(layout.anchors.get(caret.measureIndex) ?? [], caret.onset) - staff.spacing * 0.3;
+    } else {
+      const last = layout.staves
+        .filter((s) => s.staff === caret.staff)
+        .sort((a, b) => b.measureIndex - a.measureIndex)[0];
+      if (last === undefined || caret.measureIndex < last.measureIndex) {
+        return null;
+      }
+      staff = last;
+      x = last.right + staff.spacing * 0.5;
+    }
+    const point = layout.svg.createSVGPoint();
+    point.x = x;
+    point.y = staff.top - staff.spacing;
+    const client = point.matrixTransform(matrix);
+    const origin = overlay.getBoundingClientRect();
+    return {
+      left: client.x - origin.left,
+      top: client.y - origin.top,
+      width: 2,
+      height: staff.spacing * 6 * matrix.d,
+    };
+  }, [caret, renderCount]);
+
   // 楽譜は紙の見立てなので、配色に関わらず白地に黒で描く。
   //
   // OSMD が幅を測る要素には padding を置かない。padding ぶんまで描画幅に
@@ -686,6 +736,18 @@ export function ScoreView({
         onPointerLeave={handlePointerLeave}
       >
         <div ref={containerRef} className="relative isolate w-full" />
+        {caretBox && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute z-10 rounded bg-blue-600/60"
+            style={{
+              left: caretBox.left,
+              top: caretBox.top,
+              width: caretBox.width,
+              height: caretBox.height,
+            }}
+          />
+        )}
         {ghostBox && (
           <div
             aria-hidden
