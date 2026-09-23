@@ -5,6 +5,7 @@ import { EditorToolbar } from "./components/EditorToolbar";
 import { FileMenu } from "./components/FileMenu";
 import { LibraryPanel } from "./components/LibraryPanel";
 import { NewScoreForm } from "./components/NewScoreForm";
+import { OmrPanel } from "./components/OmrPanel";
 import { ScoreSettings } from "./components/ScoreSettings";
 import { ScoreView } from "./components/ScoreView";
 import { TransportControls } from "./components/TransportControls";
@@ -19,6 +20,7 @@ import { scoreToMusicXml } from "./model/musicxml";
 import { readMusicXmlFile } from "./model/musicxmlFile";
 import { MusicXmlImportError } from "./model/musicxmlImport";
 import { createEmptyScore, type NewScoreOptions } from "./model/newScore";
+import type { Recognition } from "./omr/recognize";
 import { sampleScore } from "./model/sample";
 import { measureQuarterLength, type Score } from "./model/score";
 import { useHistory } from "./state/useHistory";
@@ -80,6 +82,7 @@ export default function App() {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
   const [creating, setCreating] = useState(false);
+  const [reading, setReading] = useState(false);
   // 読み込み・書き出しなどの結果のお知らせ
   const [notice, setNotice] = useState<Notice | null>(null);
   // スライダーを動かしている間の値と、楽譜に反映する値を分けている。
@@ -329,6 +332,31 @@ export default function App() {
     }
   }, [addAndOpen]);
 
+  /** 画像から読み取った楽譜を、新しい楽譜として足して開く (#2) */
+  const addRecognized = useCallback(
+    async (recognition: Recognition, name: string) => {
+      setReading(false);
+      try {
+        await addAndOpen({ ...recognition.score, title: name });
+      } catch (error) {
+        setNotice({
+          tone: "error",
+          text: `読み取った楽譜を楽譜一覧に足せませんでした。\n${describeError(error)}`,
+        });
+        return;
+      }
+      const lines = [
+        `「${name}」を読み取り、新しい楽譜として楽譜一覧に足しました。`,
+        "読み取りは完全ではありません。再生して確かめ、違う所は編集で直してください。",
+      ];
+      if (recognition.warnings.length > 0) {
+        lines.push("", "読み取りで気づいたこと:", ...recognition.warnings.map((w) => `・${w}`));
+      }
+      setNotice({ tone: "info", text: lines.join("\n") });
+    },
+    [addAndOpen],
+  );
+
   const createScore = useCallback(
     async (options: NewScoreOptions) => {
       setCreating(false);
@@ -396,6 +424,15 @@ export default function App() {
         >
           新規作成
         </button>
+        <button
+          type="button"
+          onClick={() => setReading((r) => !r)}
+          disabled={!ready}
+          aria-expanded={reading}
+          className={secondaryButtonClass}
+        >
+          画像から読み取る
+        </button>
         <ConfirmButton
           onConfirm={resetToSample}
           confirmLabel="サンプルに戻す"
@@ -418,6 +455,13 @@ export default function App() {
           onCancel={() => setCreating(false)}
           submitLabel="作成"
           notice="新しい楽譜として楽譜一覧に足し、それを開きます。"
+        />
+      )}
+
+      {reading && (
+        <OmrPanel
+          onRecognized={(recognition, name) => void addRecognized(recognition, name)}
+          onClose={() => setReading(false)}
         />
       )}
 

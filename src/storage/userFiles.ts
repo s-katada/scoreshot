@@ -1,6 +1,6 @@
 /**
  * ユーザーが選んだ場所のファイルを読み書きする。MusicXML / MIDI の
- * 読み込み・書き出しに使う (#5)。
+ * 読み込み・書き出し (#5) と、楽譜の画像の読み込み (#2) に使う。
  *
  * アプリとして動いているときは Tauri のダイアログで保存先や読み込む
  * ファイルを選ばせる。選ばれたファイルは fs プラグインのスコープに
@@ -33,6 +33,27 @@ export const MIDI_FILE: FileType = {
   extensions: ["mid", "midi"],
   mime: "audio/midi",
 };
+
+/** 楽譜の画像 (#2)。HEIC は macOS / iOS の WebView なら読める */
+export const IMAGE_FILE: FileType = {
+  name: "画像",
+  extensions: ["png", "jpg", "jpeg", "heic", "heif", "webp"],
+  mime: "image/*",
+};
+
+const IMAGE_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  heic: "image/heic",
+  heif: "image/heif",
+  webp: "image/webp",
+};
+
+/** ファイル名から画像の MIME タイプを決める。分からなければ空文字 */
+export function imageType(name: string): string {
+  return IMAGE_TYPES[name.split(".").pop()?.toLowerCase() ?? ""] ?? "";
+}
 
 export interface PickedFile {
   name: string;
@@ -104,10 +125,25 @@ export async function openFile(types: FileType[]): Promise<PickedFile | null> {
     return { name: baseName(path), bytes: await readFile(path) };
   }
 
+  return pickWithInput(types.flatMap((t) => t.extensions.map((e) => `.${e}`)).join(","));
+}
+
+/**
+ * 画像を 1 つ選ばせる。iOS / iPadOS では写真ライブラリやカメラからも
+ * 選べるように <input type="file"> を使う (Tauri のダイアログは
+ * 「ファイル」の中しか選べない)。ほかでは openFile と同じ
+ */
+export async function openImage(): Promise<PickedFile | null> {
+  const ua = navigator.userAgent;
+  const iOS = /iPhone|iPad|iPod/.test(ua) || (ua.includes("Macintosh") && navigator.maxTouchPoints > 1);
+  return iOS ? pickWithInput("image/*") : openFile([IMAGE_FILE]);
+}
+
+function pickWithInput(accept: string): Promise<PickedFile | null> {
   return new Promise((resolve, reject) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = types.flatMap((t) => t.extensions.map((e) => `.${e}`)).join(",");
+    input.accept = accept;
     input.addEventListener("change", () => {
       const file = input.files?.[0];
       if (!file) {
