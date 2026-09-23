@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Banner } from "./components/Banner";
 import { ConfirmButton } from "./components/ConfirmButton";
 import { EditorToolbar } from "./components/EditorToolbar";
+import { ScoreSettings } from "./components/ScoreSettings";
 import { ScoreView } from "./components/ScoreView";
 import { primaryButtonClass } from "./components/styles";
 import { loadInstrument, play, playNote, stop } from "./audio/player";
@@ -185,6 +186,7 @@ export default function App() {
         <p className="text-sm opacity-60">楽譜を読み込み中…</p>
       ) : (
         <>
+          <ScoreSettings score={score} onEdit={editor.editScore} />
           <EditorToolbar editor={editor} />
           <ScoreView
             score={score}
