@@ -75,6 +75,26 @@ export function findStems(page: Page, system: System): Stem[] {
       stems.push({ ...piece });
     }
   }
+  // 細い符幹はモデルが一部しか塗らないことがあるので、元の画像のインクを
+  // たどって上下に延ばす (延ばした先の連桁や符頭までが符幹になる)
+  const inkAt = (x: number, y: number) => {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (page.ink[clampY(page, y) * page.width + clampX(page, x + dx)] === 1) {
+        return true;
+      }
+    }
+    return false;
+  };
+  for (const stem of stems) {
+    const x = Math.round(stem.x);
+    const limit = d * 6;
+    while (stem.top > 0 && stem.bottom - stem.top < limit && inkAt(x, stem.top - 1)) {
+      stem.top--;
+    }
+    while (stem.bottom < page.height - 1 && stem.bottom - stem.top < limit && inkAt(x, stem.bottom + 1)) {
+      stem.bottom++;
+    }
+  }
   return stems.filter((s) => s.bottom - s.top + 1 >= d * 1.5);
 }
 
