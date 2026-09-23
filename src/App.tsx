@@ -10,6 +10,7 @@ import { TransportControls } from "./components/TransportControls";
 import { secondaryButtonClass } from "./components/styles";
 import { playNote } from "./audio/player";
 import { usePlayback } from "./audio/usePlayback";
+import { useKeyboardShortcuts } from "./editor/useKeyboardShortcuts";
 import { useScoreEditor } from "./editor/useScoreEditor";
 import { scoreToMidi } from "./model/midi";
 import { scoreToMusicXml } from "./model/musicxml";
@@ -101,6 +102,12 @@ export default function App() {
   const editor = useScoreEditor({
     history,
     onSound: (name) => void playNote(name),
+  });
+
+  useKeyboardShortcuts({
+    editor,
+    togglePlayback: playback.toggle,
+    enabled: loaded !== null,
   });
 
   // 選んでいる音符の位置 (曲頭からの四分音符単位)。そこから再生できる
