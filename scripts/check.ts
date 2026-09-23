@@ -10,6 +10,7 @@ import "./checks/accidentals";
 import "./checks/midi";
 import "./checks/musicxmlImport";
 import "./checks/library";
+import "./checks/omr";
 import { finish } from "./checks/harness";
 
 finish();
