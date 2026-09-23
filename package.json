@@ -9,7 +9,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "cargo tauri",
-    "check": "vite build --ssr scripts/check.ts --outDir .tmp-check --logLevel error && node .tmp-check/check.js",
+    "check": "vite build -c vite.scripts.config.ts --ssr scripts/check.ts --outDir .tmp-check && node .tmp-check/check.js",
     "omr:models": "node scripts/omr/fetch-models.mjs"
   },
   "dependencies": {
