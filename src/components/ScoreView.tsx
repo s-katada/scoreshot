@@ -3,17 +3,52 @@
  *
  * OSMD には状態を持たせない。楽譜を渡されたら描き直すだけの存在として扱い、
  * 真実の情報源はあくまでデータモデル側に置く。
+ *
+ * 編集のために 2 つの橋渡しをしている:
+ *
+ * - 描いた音符とモデルの音符 (id) の対応づけ。選択の表示とクリックに使う
+ * - クリック位置から「何小節目の、どちらの段の、いつの、どの高さか」への変換
+ *
+ * どちらも描画のたびに OSMD の描画結果 (VexFlow の五線と音符) から作り直す。
  */
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   type Cursor,
   CursorType,
+  type GraphicalMeasure,
+  type GraphicalNote,
   OpenSheetMusicDisplay,
-  Pitch,
 } from "opensheetmusicdisplay";
+import { isRestEvent, staffEvents } from "../model/edit";
 import { scoreToMusicXml } from "../model/musicxml";
-import type { Score } from "../model/score";
+import { comparePitch } from "../model/pitch";
+import {
+  measureQuarterLength,
+  type Pitch,
+  type Score,
+  type StaffNumber,
+} from "../model/score";
+
+/** 五線上の位置 */
+export interface StaffPoint {
+  measureIndex: number;
+  staff: StaffNumber;
+  /**
+   * 小節頭からのおおよその時刻 (四分音符単位)。描かれた音符の間を
+   * 線形に補って求める。音符を置く位置への寄せはモデル側で行う
+   */
+  time: number;
+  /** 五線上の高さ。幹音の通し番号 (C0 = 0) */
+  diatonic: number;
+}
+
+export interface ScoreHit {
+  /** クリック位置のすぐ近くにある音符 (休符含む)。無ければ null */
+  noteId: string | null;
+  /** 五線から遠すぎる所なら null */
+  point: StaffPoint | null;
+}
 
 interface ScoreViewProps {
   score: Score;
@@ -22,63 +57,255 @@ interface ScoreViewProps {
    * 今どこを弾いているかを示す縦線を動かすために使う。
    */
   playbackPosition?: number | null;
-  /** 音符がクリックされたとき、その音の周波数 (Hz) を通知する */
-  onNoteClick?: (frequency: number) => void;
+  /** 色を付けて示す音符の id */
+  selectedNoteIds?: readonly string[];
+  /** 楽譜の上をクリック (タップ) したとき */
+  onHit?: (hit: ScoreHit) => void;
+  /** 楽譜の上でポインタを動かしたとき。外れたら null */
+  onHover?: (hit: ScoreHit | null) => void;
 }
 
-/**
- * SVG 要素を取り出せる GraphicalNote を構造的に受けるための型。
- * getSVGGElement を持つのは VexFlowGraphicalNote だが、内部クラスを
- * 直接 import せずに済ませている。
- */
-interface SvgCapableNote {
+/** 各段のいちばん上の線の高さ (幹音の通し番号)。ト音記号は F5、ヘ音記号は A3 */
+const TOP_LINE: Record<StaffNumber, number> = { 1: 38, 2: 26 };
+
+const SELECTED_COLOR = "#2563eb";
+
+/** VexFlow の五線から使うものだけを構造的に受ける */
+interface StaveLike {
+  getX(): number;
+  getWidth(): number;
+  getYForLine(line: number): number;
+  getNoteEndX(): number;
+}
+
+interface VexFlowNoteLike {
   getSVGGElement?: () => SVGGElement | null;
+  getNoteheadSVGs?: () => Element[];
+  vfnote?: [{ getAbsoluteX(): number }, number];
+}
+
+interface StaffLayout {
+  measureIndex: number;
+  staff: StaffNumber;
+  left: number;
+  right: number;
+  /** いちばん上の線の y */
+  top: number;
+  /** 線の間隔 */
+  spacing: number;
+}
+
+/** 小節内の時刻と、それが描かれた x 座標の組 */
+interface TimeAnchor {
+  time: number;
+  x: number;
+}
+
+/** 描画結果から読み取った配置。座標はすべて SVG 座標 */
+interface Layout {
+  svg: SVGSVGElement;
+  staves: StaffLayout[];
+  anchors: Map<number, TimeAnchor[]>;
+  /** 音符の id から、その音符として色を付ける要素 */
+  notes: Map<string, Element>;
+}
+
+function staveOf(measure: GraphicalMeasure): StaveLike | null {
+  const getter = (measure as unknown as { getVFStave?: () => StaveLike }).getVFStave;
+  return getter ? getter.call(measure) : null;
 }
 
 /**
- * 描画結果の各音符に click を仕掛ける。
+ * 描いた音符とモデルの音符を対応づけながら、五線と時刻の配置を集める。
  *
- * 座標計算ではなく OSMD が吐いた SVG 要素そのものに載せているので、
- * ここでは当たり判定を自前で持つ必要がない。タップ位置から音楽的な位置を
- * 逆算する本格的なヒットテストは編集機能 (Phase 3) で必要になる。
+ * 対応づけは「何小節目・どちらの段・いつ鳴り始めるか」で行い、和音の中は
+ * 高さの順に揃える (モデルは低い順、描画は符頭の y の大きい順)。
  */
-function attachNoteHandlers(
+function buildLayout(
   osmd: OpenSheetMusicDisplay,
-  onNote: (frequency: number) => void,
-): Array<() => void> {
-  const cleanups: Array<() => void> = [];
+  container: HTMLElement,
+  score: Score,
+): Layout | null {
+  // 既定のページ設定 (Endless) では楽譜全体が 1 枚の SVG に描かれる
+  const svg = container.querySelector("svg");
+  if (svg === null) {
+    return null;
+  }
+  const measureLength = measureQuarterLength(score.time);
+  const staves: StaffLayout[] = [];
+  const anchors = new Map<number, TimeAnchor[]>();
+  const notes = new Map<string, Element>();
 
-  for (const measuresAcrossStaves of osmd.GraphicSheet.MeasureList) {
-    for (const measure of measuresAcrossStaves) {
+  for (const row of osmd.GraphicSheet.MeasureList) {
+    for (const measure of row) {
       if (!measure) {
         continue;
       }
-      for (const staffEntry of measure.staffEntries) {
-        for (const voiceEntry of staffEntry.graphicalVoiceEntries) {
-          for (const note of voiceEntry.notes) {
-            const element = (note as unknown as SvgCapableNote).getSVGGElement?.();
-            // 休符は Pitch を持たないので鳴らす対象から外れる
-            const pitch = note.sourceNote?.Pitch;
-            if (!element || !pitch) {
-              continue;
-            }
+      const stave = staveOf(measure);
+      const measureIndex = measure.parentSourceMeasure?.measureListIndex;
+      const modelMeasure = score.measures[measureIndex];
+      if (stave === null || modelMeasure === undefined) {
+        continue;
+      }
+      const staff = (measure.ParentStaff.idInMusicSheet + 1) as StaffNumber;
+      const top = stave.getYForLine(0);
+      staves.push({
+        measureIndex,
+        staff,
+        left: stave.getX(),
+        right: stave.getX() + stave.getWidth(),
+        top,
+        spacing: stave.getYForLine(1) - top,
+      });
 
-            const frequency = Pitch.calcFrequency(pitch);
-            const handler = (event: Event) => {
-              event.stopPropagation();
-              onNote(frequency);
-            };
+      const points = anchors.get(measureIndex) ?? [];
+      anchors.set(measureIndex, points);
+      points.push({ time: measureLength, x: stave.getNoteEndX() });
 
-            element.addEventListener("click", handler);
-            element.style.cursor = "pointer";
-            cleanups.push(() => element.removeEventListener("click", handler));
-          }
+      const events = staffEvents(modelMeasure, staff);
+      for (const entry of measure.staffEntries) {
+        const time = entry.relInMeasureTimestamp.RealValue * 4;
+        const graphical: GraphicalNote[] = entry.graphicalVoiceEntries.flatMap(
+          (v) => v.notes,
+        );
+        const first = graphical[0] as unknown as VexFlowNoteLike | undefined;
+        const x = first?.vfnote?.[0].getAbsoluteX();
+        if (x !== undefined) {
+          points.push({ time, x });
         }
+
+        const event = events.find((e) => Math.abs(e.onset - time) < 1e-6);
+        if (event === undefined || first === undefined) {
+          continue;
+        }
+        if (isRestEvent(event)) {
+          const element = first.getSVGGElement?.();
+          if (element) {
+            notes.set(event.notes[0].id, element);
+          }
+          continue;
+        }
+        // 符頭は下 (低い音) から順に並べる
+        const heads = [...(first.getNoteheadSVGs?.() ?? [])].sort(
+          (a, b) =>
+            (b as SVGGraphicsElement).getBBox().y -
+            (a as SVGGraphicsElement).getBBox().y,
+        );
+        const sorted = [...event.notes].sort((a, b) =>
+          comparePitch(a.pitch as Pitch, b.pitch as Pitch),
+        );
+        sorted.forEach((note, i) => {
+          const head = heads[Math.min(i, heads.length - 1)];
+          if (head) {
+            notes.set(note.id, head);
+          }
+        });
       }
     }
   }
 
-  return cleanups;
+  for (const points of anchors.values()) {
+    points.sort((a, b) => a.time - b.time || a.x - b.x);
+  }
+  return { svg, staves, anchors, notes };
+}
+
+function toSvgPoint(svg: SVGSVGElement, clientX: number, clientY: number) {
+  const matrix = svg.getScreenCTM();
+  if (matrix === null) {
+    return null;
+  }
+  const point = svg.createSVGPoint();
+  point.x = clientX;
+  point.y = clientY;
+  return point.matrixTransform(matrix.inverse());
+}
+
+/** x 座標から小節内の時刻を補う */
+function timeAtX(points: TimeAnchor[], x: number): number {
+  if (points.length === 0) {
+    return 0;
+  }
+  if (x <= points[0].x) {
+    return points[0].time;
+  }
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (x <= b.x) {
+      return b.x === a.x ? a.time : a.time + ((x - a.x) / (b.x - a.x)) * (b.time - a.time);
+    }
+  }
+  return points[points.length - 1].time;
+}
+
+/** 符頭の左端から中心までのずれ (線の間隔に対する割合) */
+const HEAD_CENTER = 0.6;
+
+function hitTest(layout: Layout, clientX: number, clientY: number): ScoreHit {
+  const p = toSvgPoint(layout.svg, clientX, clientY);
+  if (p === null) {
+    return { noteId: null, point: null };
+  }
+
+  // 五線: 横の範囲に入っていて、縦にいちばん近い段
+  let best: StaffLayout | null = null;
+  let bestDistance = Infinity;
+  for (const staff of layout.staves) {
+    if (p.x < staff.left || p.x > staff.right) {
+      continue;
+    }
+    const bottom = staff.top + staff.spacing * 4;
+    const distance = p.y < staff.top ? staff.top - p.y : p.y > bottom ? p.y - bottom : 0;
+    if (distance < bestDistance) {
+      best = staff;
+      bestDistance = distance;
+    }
+  }
+  let point: StaffPoint | null = null;
+  if (best !== null && bestDistance <= best.spacing * 5) {
+    const steps = Math.round((p.y - best.top) / (best.spacing / 2));
+    const points = layout.anchors.get(best.measureIndex) ?? [];
+    point = {
+      measureIndex: best.measureIndex,
+      staff: best.staff,
+      time: Math.max(0, timeAtX(points, p.x - best.spacing * HEAD_CENTER)),
+      diatonic: TOP_LINE[best.staff] - steps,
+    };
+  }
+
+  // 音符: 画面上でいちばん近い符頭 (休符) が指の太さくらいの範囲にあれば
+  const spacing = best?.spacing ?? 10;
+  const scale = layout.svg.getScreenCTM()?.a ?? 1;
+  const reach = Math.max(12, spacing * scale * 1.2);
+  let noteId: string | null = null;
+  let nearest = reach;
+  for (const [id, element] of layout.notes) {
+    const rect = element.getBoundingClientRect();
+    const dx = Math.max(rect.left - clientX, 0, clientX - rect.right);
+    const dy = Math.max(rect.top - clientY, 0, clientY - rect.bottom);
+    const distance = Math.hypot(dx, dy);
+    if (distance < nearest) {
+      nearest = distance;
+      noteId = id;
+    }
+  }
+
+  return { noteId, point };
+}
+
+function setColor(element: Element, color: string | null): void {
+  const targets = [element, ...element.querySelectorAll("path, rect, text")];
+  for (const target of targets) {
+    const style = (target as SVGElement).style;
+    if (color === null) {
+      style.removeProperty("fill");
+      style.removeProperty("stroke");
+    } else {
+      style.fill = color;
+      style.stroke = color;
+    }
+  }
 }
 
 /**
@@ -134,36 +361,61 @@ function applyCursorSize(element: HTMLImageElement | undefined): void {
 export function ScoreView({
   score,
   playbackPosition,
-  onNoteClick,
+  selectedNoteIds = [],
+  onHit,
+  onHover,
 }: ScoreViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
-  const noteCleanupsRef = useRef<Array<() => void>>([]);
   // 読み込みは非同期なので、古い読み込みの続きが新しい描画を壊さないよう
   // 世代番号で打ち切る
   const loadTokenRef = useRef(0);
   const cursorStopsRef = useRef<number[]>([]);
   const cursorIndexRef = useRef(0);
-  // ハンドラの差し替えで楽譜を描き直さずに済むよう ref 経由で参照する
-  const onNoteClickRef = useRef(onNoteClick);
-  onNoteClickRef.current = onNoteClick;
-  // 描画済みかどうか。描く前に幅が変わっても描き直さない
-  const renderedRef = useRef(false);
+  const layoutRef = useRef<Layout | null>(null);
+  // 描画済みの楽譜。配置を作り直すときにモデル側の対応を引くのに使う
+  const renderedScoreRef = useRef<Score | null>(null);
+  const highlightedRef = useRef<Element[]>([]);
+  const selectedRef = useRef(selectedNoteIds);
+  selectedRef.current = selectedNoteIds;
 
   const musicXml = useMemo(() => scoreToMusicXml(score), [score]);
 
-  /** 描き終えたあとの後始末。音符への仕掛けとカーソルの準備 */
-  const afterRender = useCallback((osmd: OpenSheetMusicDisplay) => {
-    for (const cleanup of noteCleanupsRef.current) {
-      cleanup();
+  const applySelection = useCallback(() => {
+    for (const element of highlightedRef.current) {
+      setColor(element, null);
     }
-    noteCleanupsRef.current = attachNoteHandlers(osmd, (frequency) => {
-      onNoteClickRef.current?.(frequency);
-    });
-    cursorStopsRef.current = collectCursorStops(osmd);
-    cursorIndexRef.current = 0;
-    osmd.cursor.hide();
+    highlightedRef.current = [];
+    const layout = layoutRef.current;
+    if (layout === null) {
+      return;
+    }
+    for (const id of selectedRef.current) {
+      const element = layout.notes.get(id);
+      if (element) {
+        setColor(element, SELECTED_COLOR);
+        highlightedRef.current.push(element);
+      }
+    }
   }, []);
+
+  /** 描き終えたあとの後始末。配置の読み取り・選択の再表示・カーソルの準備 */
+  const afterRender = useCallback(
+    (osmd: OpenSheetMusicDisplay) => {
+      const rendered = renderedScoreRef.current;
+      const container = containerRef.current;
+      layoutRef.current =
+        rendered === null || container === null
+          ? null
+          : buildLayout(osmd, container, rendered);
+      highlightedRef.current = [];
+      applySelection();
+      cursorStopsRef.current = collectCursorStops(osmd);
+      cursorIndexRef.current = 0;
+      osmd.cursor.hide();
+    },
+    [applySelection],
+  );
 
   /**
    * OSMD は一度だけ作る。
@@ -173,9 +425,8 @@ export function ScoreView({
    * 楽譜が見えなくなる (issue #1)。
    *
    * 幅に合わせた描き直しも OSMD の autoResize に任せず自前で行う。
-   * 描き直すと SVG 要素が作り直されるので、音符への仕掛けやカーソルの
-   * 準備 (afterRender) をやり直す必要があるが、autoResize ではその
-   * きっかけを受け取れないため。
+   * 描き直すと SVG 要素が作り直されて選択の色や配置が失われるため、
+   * 描き直した直後に afterRender を通す必要がある。
    */
   useEffect(() => {
     const container = containerRef.current;
@@ -209,7 +460,7 @@ export function ScoreView({
       width = container.clientWidth;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
-        if (osmdRef.current !== osmd || !renderedRef.current) {
+        if (osmdRef.current !== osmd || renderedScoreRef.current === null) {
           return;
         }
         osmd.render();
@@ -222,11 +473,8 @@ export function ScoreView({
       observer.disconnect();
       window.clearTimeout(timer);
       loadTokenRef.current += 1;
-      for (const cleanup of noteCleanupsRef.current) {
-        cleanup();
-      }
-      noteCleanupsRef.current = [];
       osmdRef.current = null;
+      layoutRef.current = null;
       osmd.clear();
     };
   }, [afterRender]);
@@ -254,10 +502,16 @@ export function ScoreView({
       if (loadTokenRef.current !== token) {
         return;
       }
-      renderedRef.current = true;
+      renderedScoreRef.current = score;
       afterRender(osmd);
     })();
-  }, [musicXml, afterRender]);
+    // score も見る。休符の id だけが変わった編集では MusicXML が同じままでも
+    // 音符との対応づけを作り直す必要がある
+  }, [musicXml, score, afterRender]);
+
+  useEffect(() => {
+    applySelection();
+  }, [selectedNoteIds, applySelection]);
 
   useEffect(() => {
     const osmd = osmdRef.current;
@@ -304,6 +558,32 @@ export function ScoreView({
     applyCursorSize(cursor.cursorElement);
   }, [playbackPosition]);
 
+  const handleClick = useCallback(
+    (event: React.MouseEvent) => {
+      const layout = layoutRef.current;
+      if (layout === null || !onHit) {
+        return;
+      }
+      onHit(hitTest(layout, event.clientX, event.clientY));
+    },
+    [onHit],
+  );
+
+  const handlePointerMove = useCallback(
+    (event: React.PointerEvent) => {
+      const layout = layoutRef.current;
+      if (layout === null || !onHover) {
+        return;
+      }
+      onHover(hitTest(layout, event.clientX, event.clientY));
+    },
+    [onHover],
+  );
+
+  const handlePointerLeave = useCallback(() => {
+    onHover?.(null);
+  }, [onHover]);
+
   // 楽譜は紙の見立てなので、配色に関わらず白地に黒で描く。
   //
   // OSMD が幅を測る要素には padding を置かない。padding ぶんまで描画幅に
@@ -314,7 +594,14 @@ export function ScoreView({
   // 見えなくなる。
   return (
     <div className="w-full overflow-x-auto rounded-lg bg-white p-4 text-black shadow-sm">
-      <div ref={containerRef} className="relative isolate w-full" />
+      <div
+        className="relative w-full"
+        onClick={handleClick}
+        onPointerMove={handlePointerMove}
+        onPointerLeave={handlePointerLeave}
+      >
+        <div ref={containerRef} className="relative isolate w-full" />
+      </div>
     </div>
   );
 }

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Banner } from "./components/Banner";
 import { ConfirmButton } from "./components/ConfirmButton";
-import { ScoreView } from "./components/ScoreView";
+import { ScoreView, type ScoreHit } from "./components/ScoreView";
 import { primaryButtonClass } from "./components/styles";
 import { loadInstrument, play, playNote, stop } from "./audio/player";
+import { locateNote } from "./model/edit";
 import { sampleScore } from "./model/sample";
-import type { Score } from "./model/score";
+import { pitchToName, type Score } from "./model/score";
 import {
   loadSavedScore,
   useAutoSave,
@@ -105,9 +106,16 @@ export default function App() {
     });
   }, [playing, score]);
 
-  const handleNoteClick = useCallback((frequency: number) => {
-    void playNote(frequency);
-  }, []);
+  // 音符をクリックしたら、その音だけ鳴らす
+  const handleHit = useCallback(
+    (hit: ScoreHit) => {
+      const pitch = hit.noteId === null ? null : locateNote(score, hit.noteId)?.note.pitch;
+      if (pitch) {
+        void playNote(pitchToName(pitch));
+      }
+    },
+    [score],
+  );
 
   const resetToSample = useCallback(() => {
     stop();
@@ -180,7 +188,7 @@ export default function App() {
         <ScoreView
           score={score}
           playbackPosition={position}
-          onNoteClick={handleNoteClick}
+          onHit={handleHit}
         />
       )}
 
