@@ -14,6 +14,8 @@ import {
   type StaffEvent,
 } from "../../src/model/edit";
 import { pitchToName, type Score, type StaffNumber } from "../../src/model/score";
+import { scoreToMusicXml } from "../../src/model/musicxml";
+import { scoreToTimedNotes } from "../../src/audio/player";
 import { sampleScore } from "../../src/model/sample";
 import { scoreProblems } from "../../src/model/validate";
 import { check, checkThrows, section } from "./harness";
@@ -109,3 +111,23 @@ check("音符の途中は頭に寄せる", snapOnset(sampleScore, 1, 1, 2.6, 1) 
 check("既にある音の位置に寄せる", snapOnset(placeNotes(empty44, { measureIndex: 0, staff: 1, onset: 0 }, [C4], { type: "eighth", dots: 0 }).score, 0, 1, 0.6, 1) === 0.5);
 
 check("元の楽譜は書き換えない", JSON.stringify(sampleScore.measures[0].notes.filter((n) => n.staff === 1).map((n) => n.pitch && pitchToName(n.pitch))) === '["C4","C4","G4","G4"]');
+
+// 空の小節から打ち込んだ楽譜が、そのまま再生・書き出しできるか
+{
+  let score: Score = { ...sampleScore, measures: [emptyMeasure(sampleScore.time), emptyMeasure(sampleScore.time)] };
+  score = placeNotes(score, { measureIndex: 0, staff: 1, onset: 0 }, [C4], half).score;
+  score = addChordNote(score, { measureIndex: 0, staff: 1, onset: 0 }, E4, quarter).score;
+  score = addChordNote(score, { measureIndex: 0, staff: 1, onset: 0 }, G4, quarter).score;
+  score = placeNotes(score, { measureIndex: 0, staff: 2, onset: 0 }, [{ step: "C", octave: 3 }], { type: "whole", dots: 0 }).score;
+  score = placeNotes(score, { measureIndex: 1, staff: 1, onset: 1 }, [G4], { type: "quarter", dots: 1 }).score;
+
+  const timed = scoreToTimedNotes(score);
+  const chordNotes = timed.filter((n) => n.at === 0 && n.name.endsWith("4"));
+  check("打ち込んだ和音は同時に鳴る", chordNotes.length === 3 && chordNotes.every((n) => n.length === 2),
+    chordNotes.map((n) => `${n.name}@${n.at}`).join(" "));
+  const dotted = timed.find((n) => n.name === "G4" && n.at === 5);
+  check("付点 4 分音符は 1.5 拍", dotted?.length === 1.5, `length=${dotted?.length}`);
+  check("打ち込んだ楽譜は約束事を満たす", scoreProblems(score).length === 0, scoreProblems(score).join(" / "));
+  const backups = [...scoreToMusicXml(score).matchAll(/<backup>\s*<duration>(\d+)<\/duration>/g)].map((m) => Number(m[1]));
+  check("打ち込んだ楽譜の backup は小節の長さ", backups.length === 2 && backups.every((d) => d === 1920), backups.join(","));
+}
