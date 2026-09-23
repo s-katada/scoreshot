@@ -6,8 +6,10 @@ import { FileMenu } from "./components/FileMenu";
 import { NewScoreForm } from "./components/NewScoreForm";
 import { ScoreSettings } from "./components/ScoreSettings";
 import { ScoreView } from "./components/ScoreView";
-import { primaryButtonClass, secondaryButtonClass } from "./components/styles";
-import { loadInstrument, play, playNote, stop } from "./audio/player";
+import { TransportControls } from "./components/TransportControls";
+import { secondaryButtonClass } from "./components/styles";
+import { playNote } from "./audio/player";
+import { usePlayback } from "./audio/usePlayback";
 import { useScoreEditor } from "./editor/useScoreEditor";
 import { scoreToMidi } from "./model/midi";
 import { scoreToMusicXml } from "./model/musicxml";
@@ -15,7 +17,7 @@ import { readMusicXmlFile } from "./model/musicxmlFile";
 import { MusicXmlImportError } from "./model/musicxmlImport";
 import { createEmptyScore, type NewScoreOptions } from "./model/newScore";
 import { sampleScore } from "./model/sample";
-import type { Score } from "./model/score";
+import { measureQuarterLength, type Score } from "./model/score";
 import { useHistory } from "./state/useHistory";
 import {
   MIDI_FILE,
@@ -62,24 +64,7 @@ export default function App() {
   // テンポは MusicXML のメトロノーム記号に載るため、確定させずに反映すると
   // つまみを動かすたびに OSMD の再レイアウトが走ってしまう。
   const [tempoInput, setTempoInput] = useState(score.tempo);
-  const [playing, setPlaying] = useState(false);
-  const [audioReady, setAudioReady] = useState(false);
-  // 再生位置 (四分音符単位)。null は停止中
-  const [position, setPosition] = useState<number | null>(null);
-
-  // 音源の読み込みにはユーザー操作が要らないので起動時に済ませておく。
-  // 最初の再生で 2MB の読み込みを待たされるのを避けるため。
-  useEffect(() => {
-    let cancelled = false;
-    void loadInstrument().then(() => {
-      if (!cancelled) {
-        setAudioReady(true);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const playback = usePlayback(score);
 
   // 前回の楽譜を復元する。無ければ、または壊れていればサンプルのまま
   useEffect(() => {
@@ -118,23 +103,12 @@ export default function App() {
     onSound: (name) => void playNote(name),
   });
 
-  const handlePlay = useCallback(async () => {
-    if (playing) {
-      stop();
-      setPlaying(false);
-      setPosition(null);
-      return;
-    }
-    setPlaying(true);
-    setPosition(0);
-    await play(score, {
-      onEnded: () => {
-        setPlaying(false);
-        setPosition(null);
-      },
-      onPosition: setPosition,
-    });
-  }, [playing, score]);
+  // 選んでいる音符の位置 (曲頭からの四分音符単位)。そこから再生できる
+  const selectionPosition =
+    editor.selected === null
+      ? null
+      : editor.selected.measureIndex * measureQuarterLength(score.time) +
+        editor.selected.event.onset;
 
   /** 楽譜を形式 label のファイルに書き出す */
   const exportScore = useCallback(
@@ -165,15 +139,14 @@ export default function App() {
   );
 
   /** 楽譜を丸ごと差し替える。履歴に積むので元に戻せる */
+  const stopPlayback = playback.stop;
   const replaceScore = useCallback(
     (next: Score) => {
-      stop();
-      setPlaying(false);
-      setPosition(null);
+      stopPlayback();
       editor.select(null);
       history.update(() => next);
     },
-    [history, editor],
+    [history, editor, stopPlayback],
   );
 
   const resetToSample = useCallback(() => replaceScore(sampleScore), [replaceScore]);
@@ -242,34 +215,15 @@ export default function App() {
         </Banner>
       )}
 
-      <section className="flex flex-wrap items-center gap-6">
-        <button
-          type="button"
-          onClick={() => void handlePlay()}
-          disabled={!audioReady}
-          className={primaryButtonClass}
-        >
-          {!audioReady ? "音源を読み込み中…" : playing ? "停止" : "再生"}
-        </button>
+      <TransportControls
+        playback={playback}
+        selectionPosition={selectionPosition}
+        tempo={tempoInput}
+        onTempoInput={setTempoInput}
+        onTempoCommit={commitTempo}
+      />
 
-        <label className="flex items-center gap-3 text-sm">
-          <span className="opacity-60">テンポ</span>
-          <input
-            type="range"
-            min={40}
-            max={200}
-            step={1}
-            value={tempoInput}
-            onChange={(e) => setTempoInput(Number(e.target.value))}
-            onPointerUp={commitTempo}
-            onKeyUp={commitTempo}
-            className="w-40"
-          />
-          <span className="w-16 tabular-nums opacity-60">
-            {tempoInput} BPM
-          </span>
-        </label>
-
+      <section className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={() => setCreating((c) => !c)}
@@ -313,7 +267,7 @@ export default function App() {
           <EditorToolbar editor={editor} />
           <ScoreView
             score={score}
-            playbackPosition={position}
+            playbackPosition={playback.position}
             selectedNoteIds={editor.selectedIds}
             ghost={editor.ghost}
             onHit={editor.handleHit}
