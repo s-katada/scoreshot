@@ -5,6 +5,7 @@ import "./checks/timing";
 import "./checks/storage";
 import "./checks/edit";
 import "./checks/accidentals";
+import "./checks/midi";
 import { finish } from "./checks/harness";
 
 finish();
