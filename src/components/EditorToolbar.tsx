@@ -16,6 +16,20 @@ const PALETTE_TYPES: Array<{ type: NoteType; label: string; title: string }> = [
   { type: "16th", label: "16分", title: "16 分音符" },
 ];
 
+/** キーボードの割り当て (useKeyboardShortcuts と揃える) */
+const KEYBOARD_HELP: Array<[string, string]> = [
+  ["A〜G", "入力カーソルの位置に音符を置く (⇧ で選んでいる音に和音を積む)"],
+  ["3〜7", "音価 (16 分・8 分・4 分・2 分・全音符)"],
+  [".", "付点"],
+  ["0", "休符を置く"],
+  ["↑ / ↓", "選んでいる音を 1 音上下 (⌘ と一緒でオクターブ)"],
+  ["← / →", "前後の音を選ぶ"],
+  ["Delete", "選んでいる音を消す"],
+  ["⌘Z / ⇧⌘Z", "元に戻す / やり直す"],
+  ["Space", "再生 / 一時停止"],
+  ["Esc", "選択を外す"],
+];
+
 const MODES: Array<{ mode: EditMode; label: string; title: string }> = [
   { mode: "input", label: "入力", title: "五線をタップして音符を置く" },
   { mode: "select", label: "選択", title: "音符をタップして選ぶ" },
@@ -171,6 +185,18 @@ export function EditorToolbar({ editor }: { editor: ScoreEditor }) {
           </ToolButton>
         </Group>
       </div>
+
+      <details className="text-sm">
+        <summary className="cursor-pointer select-none opacity-60">キーボードの操作</summary>
+        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 opacity-80">
+          {KEYBOARD_HELP.map(([keys, action]) => (
+            <div key={keys} className="contents">
+              <dt className="font-mono">{keys}</dt>
+              <dd>{action}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
 
       <p className="min-h-5 text-sm" aria-live="polite">
         {editor.message !== null ? (
