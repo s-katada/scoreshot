@@ -137,11 +137,26 @@ export function loadInstrument(): Promise<Tone.Sampler> {
   return instrumentLoading;
 }
 
+/** Audio Session API (Safari / WKWebView 16.4 以降)。型定義はまだ標準に無い */
+interface AudioSessionNavigator {
+  audioSession?: { type: string };
+}
+
 /**
  * AudioContext を起こす。ブラウザ/WebView はユーザー操作を起点にしか
  * 音を鳴らせないので、必ずクリック等のハンドラから呼ぶこと。
+ *
+ * あわせて、この音が「再生」(楽曲) であることをページから伝える。既定の
+ * 「環境音」のままだと、iOS の消音スイッチが入っているときに鳴らない
+ * (#8)。アプリ側でも AVAudioSession を再生にしている
+ * (src-tauri/src/audio_session.rs) が、WebKit は Web Audio を鳴らすときに
+ * セッションの種類を決め直すことがあるので、両方で揃えておく。
  */
 export async function ensureAudioReady(): Promise<void> {
+  const session = (navigator as Navigator & AudioSessionNavigator).audioSession;
+  if (session !== undefined) {
+    session.type = "playback";
+  }
   await Tone.start();
 }
 
