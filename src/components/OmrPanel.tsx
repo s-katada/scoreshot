@@ -1,8 +1,8 @@
 /**
  * 楽譜の画像から読み取る画面 (#2)。
  *
- * 画像ファイルを選び、画像のバイナリにして読み取り (readScoreFromImage)
- * に渡す。読み取りには 1 分ほどかかるので、
+ * 画像ファイルを選ぶか、カメラで撮る。どちらも画像のバイナリにして同じ
+ * 読み取り (readScoreFromImage) に渡す。読み取りには 1 分ほどかかるので、
  * どこまで進んだかと経過時間を出し、途中でやめられるようにする。
  */
 
@@ -12,6 +12,7 @@ import type { OmrProgress, OmrStage } from "../omr/pipeline";
 import type { Recognition } from "../omr/recognize";
 import { imageType, openImage } from "../storage/userFiles";
 import { describeError } from "../util/errors";
+import { CameraCapture } from "./CameraCapture";
 import { secondaryButtonClass } from "./styles";
 
 interface OmrPanelProps {
@@ -22,6 +23,7 @@ interface OmrPanelProps {
 
 type PanelState =
   | { kind: "idle"; error?: string }
+  | { kind: "camera" }
   | { kind: "reading"; name: string; progress: OmrProgress; startedAt: number };
 
 const STAGE_LABEL: Record<OmrStage, string> = {
@@ -94,6 +96,16 @@ export function OmrPanel({ onRecognized, onClose }: OmrPanelProps) {
     }
   };
 
+  const capture = (photo: Blob) => {
+    const taken = new Date().toLocaleString("ja-JP", {
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    void read(photo, `撮影した楽譜 ${taken}`);
+  };
+
   return (
     <section
       className="flex flex-col gap-4 rounded-lg border border-neutral-200 p-4 text-sm dark:border-neutral-800"
@@ -111,6 +123,10 @@ export function OmrPanel({ onRecognized, onClose }: OmrPanelProps) {
           ✕
         </button>
       </div>
+
+      {state.kind === "camera" && (
+        <CameraCapture onCapture={capture} onCancel={() => setState({ kind: "idle" })} />
+      )}
 
       {state.kind === "reading" && (
         <div className="flex flex-col gap-2" aria-live="polite">
@@ -151,6 +167,9 @@ export function OmrPanel({ onRecognized, onClose }: OmrPanelProps) {
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void pickFile()} className={secondaryButtonClass}>
               画像ファイルを選ぶ
+            </button>
+            <button type="button" onClick={() => setState({ kind: "camera" })} className={secondaryButtonClass}>
+              カメラで撮る
             </button>
           </div>
           <p className="text-xs opacity-60">
