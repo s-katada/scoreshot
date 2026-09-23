@@ -11,6 +11,8 @@ import { loadInstrument, play, playNote, stop } from "./audio/player";
 import { useScoreEditor } from "./editor/useScoreEditor";
 import { scoreToMidi } from "./model/midi";
 import { scoreToMusicXml } from "./model/musicxml";
+import { readMusicXmlFile } from "./model/musicxmlFile";
+import { MusicXmlImportError } from "./model/musicxmlImport";
 import { createEmptyScore, type NewScoreOptions } from "./model/newScore";
 import { sampleScore } from "./model/sample";
 import type { Score } from "./model/score";
@@ -18,6 +20,7 @@ import { useHistory } from "./state/useHistory";
 import {
   MIDI_FILE,
   MUSICXML_FILE,
+  openFile,
   safeFileName,
   saveFileAs,
   type FileType,
@@ -175,6 +178,36 @@ export default function App() {
 
   const resetToSample = useCallback(() => replaceScore(sampleScore), [replaceScore]);
 
+  const importMusicXml = useCallback(async () => {
+    let picked;
+    try {
+      picked = await openFile([MUSICXML_FILE]);
+    } catch (error) {
+      setNotice({ tone: "error", text: `ファイルを開けませんでした。\n${describeError(error)}` });
+      return;
+    }
+    if (picked === null) {
+      return;
+    }
+    try {
+      const { score: imported, warnings } = readMusicXmlFile(picked.name, picked.bytes);
+      replaceScore(imported);
+      const lines = [
+        `「${imported.title}」を読み込み、今の楽譜と置き換えました (元に戻すで戻せます)。`,
+      ];
+      if (warnings.length > 0) {
+        lines.push("", "読み込めなかったもの・変えて読み込んだもの:", ...warnings.map((w) => `・${w}`));
+      }
+      setNotice({ tone: "info", text: lines.join("\n") });
+    } catch (error) {
+      const reason =
+        error instanceof MusicXmlImportError
+          ? error.message
+          : `思わぬエラーです: ${describeError(error)}`;
+      setNotice({ tone: "error", text: `「${picked.name}」を読み込めませんでした。\n${reason}` });
+    }
+  }, [replaceScore]);
+
   const createScore = useCallback(
     (options: NewScoreOptions) => {
       replaceScore(createEmptyScore(options));
@@ -256,6 +289,7 @@ export default function App() {
         </ConfirmButton>
 
         <FileMenu
+          onImportMusicXml={() => void importMusicXml()}
           onExportMusicXml={() => void exportMusicXml()}
           onExportMidi={() => void exportMidi()}
           disabled={loaded === null}
