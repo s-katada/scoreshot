@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
-import type { ScoreHit } from "../components/ScoreView";
+import type { GhostNote, ScoreHit } from "../components/ScoreView";
 import {
   EditError,
   addChordNote,
@@ -197,6 +197,17 @@ export function useScoreEditor({ history, onSound }: Options) {
     [mode, palette, target, apply, select, sound],
   );
 
+  const ghost = useMemo<GhostNote | null>(() => {
+    if (mode !== "input" || hover === null) {
+      return null;
+    }
+    const place = target(hover);
+    if (place === null) {
+      return null;
+    }
+    return { ...place.position, diatonic: diatonicNumber(place.pitch) };
+  }, [mode, hover, target]);
+
   /** 案内の文言。「2 小節目 3 拍目 上段 E4」 */
   const hoverLabel = useMemo(() => {
     if (hover === null || hover.point === null) {
@@ -322,6 +333,7 @@ export function useScoreEditor({ history, onSound }: Options) {
     select,
     message,
     dismissMessage: () => setMessage(null),
+    ghost,
     hoverLabel,
     handleHit,
     handleHover: setHover,
