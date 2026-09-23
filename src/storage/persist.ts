@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { sampleScore } from "../model/sample";
 import type { Score } from "../model/score";
 import { parseScoreFile, serializeScore } from "./scoreFile";
+import { describeError } from "../util/errors";
 import { getTextStore } from "./textStore";
 
 const FILE_NAME = "score.json";
@@ -26,10 +27,6 @@ export interface LoadedScore {
   inSync: boolean;
 }
 
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /**
  * 保存済みの楽譜を読み込む。無ければサンプルを返す。
  *
@@ -46,7 +43,7 @@ export async function loadSavedScore(): Promise<LoadedScore> {
     return {
       score: sampleScore,
       restored: false,
-      error: `保存された楽譜を読み込めませんでした。\n${describe(error)}`,
+      error: `保存された楽譜を読み込めませんでした。\n${describeError(error)}`,
       inSync: true,
     };
   }
@@ -70,7 +67,7 @@ export async function loadSavedScore(): Promise<LoadedScore> {
     return {
       score: sampleScore,
       restored: false,
-      error: `保存された楽譜が壊れていたため、サンプルを表示しています。\n${describe(error)}${backup}`,
+      error: `保存された楽譜が壊れていたため、サンプルを表示しています。\n${describeError(error)}${backup}`,
       // 退避できなかったときは、編集されるまで元のファイルに触らない
       inSync: !backedUp,
     };
@@ -140,7 +137,7 @@ export function useAutoSave(
           if (isLatest()) {
             setStatus({
               state: "error",
-              message: `楽譜を保存できませんでした。\n${describe(error)}`,
+              message: `楽譜を保存できませんでした。\n${describeError(error)}`,
             });
           }
         }
