@@ -7,6 +7,7 @@
 
 import * as Tone from "tone";
 import {
+  measureQuarterLength,
   noteQuarterLength,
   pitchToName,
   type Score,
@@ -31,8 +32,7 @@ export interface TimedNote {
  */
 export function scoreToTimedNotes(score: Score): TimedNote[] {
   const out: TimedNote[] = [];
-  // 拍子から 1 小節の長さを四分音符単位で求める (6/8 なら 3)
-  const measureLength = (score.time.beats * 4) / score.time.beatType;
+  const measureLength = measureQuarterLength(score.time);
   let measureStart = 0;
 
   for (const measure of score.measures) {
@@ -71,8 +71,7 @@ export function scoreToTimedNotes(score: Score): TimedNote[] {
 
 /** 曲全体の長さ (四分音符単位) */
 export function scoreQuarterLength(score: Score): number {
-  const measureLength = (score.time.beats * 4) / score.time.beatType;
-  return score.measures.length * measureLength;
+  return score.measures.length * measureQuarterLength(score.time);
 }
 
 /**
