@@ -15,17 +15,22 @@ interface TransportControlsProps {
   onTempoCommit: () => void;
 }
 
+// ▶ や ⏸ は環境によって色付きの絵文字で描かれる。後ろに異体字セレクタ
+// (U+FE0E) を付けて、文字として描かせる
+const PLAY = "\u25B6\uFE0E";
+const PAUSE = "\u23F8\uFE0E";
+
 function toggleLabel(playback: Playback): string {
   if (!playback.ready) {
     return "音源を読み込み中…";
   }
   switch (playback.state) {
     case "stopped":
-      return "▶ 再生";
+      return `${PLAY} 再生`;
     case "playing":
-      return "⏸ 一時停止";
+      return `${PAUSE} 一時停止`;
     case "paused":
-      return "▶ 再開";
+      return `${PLAY} 再開`;
   }
 }
 
