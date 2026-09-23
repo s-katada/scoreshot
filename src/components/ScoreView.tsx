@@ -12,7 +12,7 @@
  * どちらも描画のたびに OSMD の描画結果 (VexFlow の五線と音符) から作り直す。
  */
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Cursor,
   CursorType,
@@ -50,6 +50,14 @@ export interface ScoreHit {
   point: StaffPoint | null;
 }
 
+/** 入力モードで「ここに置かれる」を示す半透明の符頭 */
+export interface GhostNote {
+  measureIndex: number;
+  staff: StaffNumber;
+  onset: number;
+  diatonic: number;
+}
+
 interface ScoreViewProps {
   score: Score;
   /**
@@ -59,6 +67,7 @@ interface ScoreViewProps {
   playbackPosition?: number | null;
   /** 色を付けて示す音符の id */
   selectedNoteIds?: readonly string[];
+  ghost?: GhostNote | null;
   /** 楽譜の上をクリック (タップ) したとき */
   onHit?: (hit: ScoreHit) => void;
   /** 楽譜の上でポインタを動かしたとき。外れたら null */
@@ -241,6 +250,24 @@ function timeAtX(points: TimeAnchor[], x: number): number {
   return points[points.length - 1].time;
 }
 
+/** 時刻が描かれる x 座標 (timeAtX の逆) */
+function xAtTime(points: TimeAnchor[], time: number): number {
+  if (points.length === 0) {
+    return 0;
+  }
+  if (time <= points[0].time) {
+    return points[0].x;
+  }
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (time <= b.time) {
+      return b.time === a.time ? a.x : a.x + ((time - a.time) / (b.time - a.time)) * (b.x - a.x);
+    }
+  }
+  return points[points.length - 1].x;
+}
+
 /** 符頭の左端から中心までのずれ (線の間隔に対する割合) */
 const HEAD_CENTER = 0.6;
 
@@ -360,15 +387,25 @@ function applyCursorSize(element: HTMLImageElement | undefined): void {
   element.style.zIndex = "5";
 }
 
+interface GhostBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export function ScoreView({
   score,
   playbackPosition,
   selectedNoteIds = [],
+  ghost = null,
   onHit,
   onHover,
   cursorStyle = "default",
 }: ScoreViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  // 案内の符頭を重ねるための枠。OSMD が中身を管理する containerRef とは分けておく
+  const overlayRef = useRef<HTMLDivElement>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
   // 読み込みは非同期なので、古い読み込みの続きが新しい描画を壊さないよう
   // 世代番号で打ち切る
@@ -381,6 +418,8 @@ export function ScoreView({
   const highlightedRef = useRef<Element[]>([]);
   const selectedRef = useRef(selectedNoteIds);
   selectedRef.current = selectedNoteIds;
+  // 描き直すたびに増やし、配置に依存する表示 (選択・案内) を更新させる
+  const [renderCount, setRenderCount] = useState(0);
 
   const musicXml = useMemo(() => scoreToMusicXml(score), [score]);
 
@@ -416,6 +455,7 @@ export function ScoreView({
       cursorStopsRef.current = collectCursorStops(osmd);
       cursorIndexRef.current = 0;
       osmd.cursor.hide();
+      setRenderCount((n) => n + 1);
     },
     [applySelection],
   );
@@ -587,6 +627,39 @@ export function ScoreView({
     onHover?.(null);
   }, [onHover]);
 
+  // 案内の符頭を置く位置。コンテナ内の座標に直して絶対配置する
+  const ghostBox = useMemo<GhostBox | null>(() => {
+    const layout = layoutRef.current;
+    const overlay = overlayRef.current;
+    if (ghost === null || layout === null || overlay === null || renderCount === 0) {
+      return null;
+    }
+    const staff = layout.staves.find(
+      (s) => s.measureIndex === ghost.measureIndex && s.staff === ghost.staff,
+    );
+    const matrix = layout.svg.getScreenCTM();
+    if (staff === undefined || matrix === null) {
+      return null;
+    }
+    const points = layout.anchors.get(ghost.measureIndex) ?? [];
+    const x = xAtTime(points, ghost.onset) + staff.spacing * HEAD_CENTER;
+    const y = staff.top + (TOP_LINE[ghost.staff] - ghost.diatonic) * (staff.spacing / 2);
+    const point = layout.svg.createSVGPoint();
+    point.x = x;
+    point.y = y;
+    const client = point.matrixTransform(matrix);
+    const origin = overlay.getBoundingClientRect();
+    const width = staff.spacing * 1.3 * matrix.a;
+    const height = staff.spacing * matrix.d;
+    return {
+      left: client.x - origin.left - width / 2,
+      top: client.y - origin.top - height / 2,
+      width,
+      height,
+    };
+    // renderCount: 描き直すと座標が変わるので、そのたびに測り直す
+  }, [ghost, renderCount]);
+
   // 楽譜は紙の見立てなので、配色に関わらず白地に黒で描く。
   //
   // OSMD が幅を測る要素には padding を置かない。padding ぶんまで描画幅に
@@ -598,6 +671,7 @@ export function ScoreView({
   return (
     <div className="w-full overflow-x-auto rounded-lg bg-white p-4 text-black shadow-sm">
       <div
+        ref={overlayRef}
         className="relative w-full"
         style={{ cursor: cursorStyle }}
         onClick={handleClick}
@@ -605,6 +679,19 @@ export function ScoreView({
         onPointerLeave={handlePointerLeave}
       >
         <div ref={containerRef} className="relative isolate w-full" />
+        {ghostBox && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute z-10 rounded-[50%] bg-blue-600/40"
+            style={{
+              left: ghostBox.left,
+              top: ghostBox.top,
+              width: ghostBox.width,
+              height: ghostBox.height,
+              transform: "rotate(-20deg)",
+            }}
+          />
+        )}
       </div>
     </div>
   );

@@ -190,6 +190,7 @@ export default function App() {
             score={score}
             playbackPosition={position}
             selectedNoteIds={editor.selectedIds}
+            ghost={editor.ghost}
             onHit={editor.handleHit}
             onHover={editor.handleHover}
             cursorStyle={editor.mode === "input" ? "crosshair" : "default"}
