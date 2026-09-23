@@ -1,20 +1,22 @@
 /**
  * OSMD で楽譜を描画するコンポーネント。
  *
- * OSMD には状態を持たせない。MusicXML を渡されたら描き直すだけの存在として扱い、
+ * OSMD には状態を持たせない。楽譜を渡されたら描き直すだけの存在として扱い、
  * 真実の情報源はあくまでデータモデル側に置く。
  */
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   type Cursor,
   CursorType,
   OpenSheetMusicDisplay,
   Pitch,
 } from "opensheetmusicdisplay";
+import { scoreToMusicXml } from "../model/musicxml";
+import type { Score } from "../model/score";
 
 interface ScoreViewProps {
-  musicXml: string;
+  score: Score;
   /**
    * 再生位置を四分音符単位で受ける。null なら停止中。
    * 今どこを弾いているかを示す縦線を動かすために使う。
@@ -130,7 +132,7 @@ function applyCursorSize(element: HTMLImageElement | undefined): void {
 }
 
 export function ScoreView({
-  musicXml,
+  score,
   playbackPosition,
   onNoteClick,
 }: ScoreViewProps) {
@@ -145,6 +147,23 @@ export function ScoreView({
   // ハンドラの差し替えで楽譜を描き直さずに済むよう ref 経由で参照する
   const onNoteClickRef = useRef(onNoteClick);
   onNoteClickRef.current = onNoteClick;
+  // 描画済みかどうか。描く前に幅が変わっても描き直さない
+  const renderedRef = useRef(false);
+
+  const musicXml = useMemo(() => scoreToMusicXml(score), [score]);
+
+  /** 描き終えたあとの後始末。音符への仕掛けとカーソルの準備 */
+  const afterRender = useCallback((osmd: OpenSheetMusicDisplay) => {
+    for (const cleanup of noteCleanupsRef.current) {
+      cleanup();
+    }
+    noteCleanupsRef.current = attachNoteHandlers(osmd, (frequency) => {
+      onNoteClickRef.current?.(frequency);
+    });
+    cursorStopsRef.current = collectCursorStops(osmd);
+    cursorIndexRef.current = 0;
+    osmd.cursor.hide();
+  }, []);
 
   /**
    * OSMD は一度だけ作る。
@@ -152,6 +171,11 @@ export function ScoreView({
    * 楽譜が変わるたびに作り直すと、前のインスタンスが残した要素と
    * autoResize のリサイズ監視がコンテナに積み上がり、描画が下へずれて
    * 楽譜が見えなくなる (issue #1)。
+   *
+   * 幅に合わせた描き直しも OSMD の autoResize に任せず自前で行う。
+   * 描き直すと SVG 要素が作り直されるので、音符への仕掛けやカーソルの
+   * 準備 (afterRender) をやり直す必要があるが、autoResize ではその
+   * きっかけを受け取れないため。
    */
   useEffect(() => {
     const container = containerRef.current;
@@ -160,7 +184,7 @@ export function ScoreView({
     }
 
     const osmd = new OpenSheetMusicDisplay(container, {
-      autoResize: true,
+      autoResize: false,
       backend: "svg",
       drawTitle: true,
       drawPartNames: false,
@@ -176,7 +200,27 @@ export function ScoreView({
     });
     osmdRef.current = osmd;
 
+    let width = container.clientWidth;
+    let timer: number | undefined;
+    const observer = new ResizeObserver(() => {
+      if (container.clientWidth === width) {
+        return;
+      }
+      width = container.clientWidth;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        if (osmdRef.current !== osmd || !renderedRef.current) {
+          return;
+        }
+        osmd.render();
+        afterRender(osmd);
+      }, 150);
+    });
+    observer.observe(container);
+
     return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
       loadTokenRef.current += 1;
       for (const cleanup of noteCleanupsRef.current) {
         cleanup();
@@ -185,7 +229,7 @@ export function ScoreView({
       osmdRef.current = null;
       osmd.clear();
     };
-  }, []);
+  }, [afterRender]);
 
   /** 楽譜が変わったら読み直して描き直す */
   useEffect(() => {
@@ -210,18 +254,10 @@ export function ScoreView({
       if (loadTokenRef.current !== token) {
         return;
       }
-
-      for (const cleanup of noteCleanupsRef.current) {
-        cleanup();
-      }
-      noteCleanupsRef.current = attachNoteHandlers(osmd, (frequency) => {
-        onNoteClickRef.current?.(frequency);
-      });
-      cursorStopsRef.current = collectCursorStops(osmd);
-      cursorIndexRef.current = 0;
-      osmd.cursor.hide();
+      renderedRef.current = true;
+      afterRender(osmd);
     })();
-  }, [musicXml]);
+  }, [musicXml, afterRender]);
 
   useEffect(() => {
     const osmd = osmdRef.current;

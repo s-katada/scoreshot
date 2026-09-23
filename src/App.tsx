@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Banner } from "./components/Banner";
 import { ConfirmButton } from "./components/ConfirmButton";
 import { ScoreView } from "./components/ScoreView";
 import { primaryButtonClass } from "./components/styles";
 import { loadInstrument, play, playNote, stop } from "./audio/player";
-import { scoreToMusicXml } from "./model/musicxml";
 import { sampleScore } from "./model/sample";
 import type { Score } from "./model/score";
 import {
@@ -87,8 +86,6 @@ export default function App() {
       current.tempo === tempoInput ? current : { ...current, tempo: tempoInput },
     );
   }, [tempoInput]);
-
-  const musicXml = useMemo(() => scoreToMusicXml(score), [score]);
 
   const handlePlay = useCallback(async () => {
     if (playing) {
@@ -181,7 +178,7 @@ export default function App() {
         <p className="text-sm opacity-60">楽譜を読み込み中…</p>
       ) : (
         <ScoreView
-          musicXml={musicXml}
+          score={score}
           playbackPosition={position}
           onNoteClick={handleNoteClick}
         />
