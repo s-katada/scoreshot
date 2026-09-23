@@ -270,6 +270,7 @@ export default function App() {
             playbackPosition={playback.position}
             selectedNoteIds={editor.selectedIds}
             ghost={editor.ghost}
+            caret={editor.cursor}
             onHit={editor.handleHit}
             onHover={editor.handleHover}
             cursorStyle={editor.mode === "input" ? "crosshair" : "default"}
