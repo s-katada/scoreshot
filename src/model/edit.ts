@@ -589,3 +589,47 @@ export function snapOnset(
   );
   return inside === undefined ? best : inside.onset;
 }
+
+export function setTitle(score: Score, title: string): Score {
+  return score.title === title ? score : { ...score, title };
+}
+
+/**
+ * 調号を変える。移調ではないので、鳴る高さ (実音) はそのまま保つ。
+ * どの音に臨時記号が要るかは書き出すときに調号から決まる。
+ */
+export function setKeySignature(score: Score, fifths: number): Score {
+  if (!Number.isInteger(fifths) || fifths < -7 || fifths > 7) {
+    throw new EditError("調号は ♭7 つから ♯7 つまでです");
+  }
+  return score.key.fifths === fifths ? score : { ...score, key: { fifths } };
+}
+
+/**
+ * 拍子を変える。
+ *
+ * 小節の中身はそのまま保ち、新しい小節の長さに合わせて末尾の休符を
+ * 足すか削る。音符が新しい小節に収まらない小節があれば変えられない
+ * (小節線をまたいで詰め直すにはタイが要るため)。
+ */
+export function setTimeSignature(score: Score, time: Score["time"]): Score {
+  if (time.beats === score.time.beats && time.beatType === score.time.beatType) {
+    return score;
+  }
+  const length = measureQuarterLength(time);
+  const measures = score.measures.map((measure, index) => {
+    let next = measure;
+    for (const staff of [1, 2] as StaffNumber[]) {
+      const sounding = staffEvents(measure, staff).filter((e) => !isRestEvent(e));
+      const end = Math.max(0, ...sounding.map((e) => e.onset + e.length));
+      if (end > length + EPSILON) {
+        throw new EditError(
+          `${index + 1} 小節目の音符が ${time.beats}/${time.beatType} 拍子の小節に収まりません`,
+        );
+      }
+      next = withStaff(next, staff, fillStaff(sounding, staff, time));
+    }
+    return next;
+  });
+  return { ...score, time: { ...time }, measures };
+}
