@@ -10,7 +10,12 @@
     "preview": "vite preview",
     "tauri": "cargo tauri",
     "check": "vite build -c vite.scripts.config.ts --ssr scripts/check.ts --outDir .tmp-check && node .tmp-check/check.js",
-    "omr:models": "node scripts/omr/fetch-models.mjs"
+    "omr:models": "node scripts/omr/fetch-models.mjs",
+    "omr:segment": "vite build -c vite.scripts.config.ts --ssr scripts/omr/segment-page.ts --outDir .tmp-omr/segment && node .tmp-omr/segment/segment-page.js",
+    "omr:corpus": "vite build -c vite.scripts.config.ts --ssr scripts/omr/make-corpus.ts --outDir .tmp-omr/corpus && node .tmp-omr/corpus/make-corpus.js",
+    "omr:degrade": "vite build -c vite.scripts.config.ts --ssr scripts/omr/degrade.ts --outDir .tmp-omr/degrade && node .tmp-omr/degrade/degrade.js",
+    "omr:evaluate": "vite build -c vite.scripts.config.ts --ssr scripts/omr/evaluate.ts --outDir .tmp-omr/evaluate && node .tmp-omr/evaluate/evaluate.js",
+    "omr:inspect": "vite build -c vite.scripts.config.ts --ssr scripts/omr/inspect.ts --outDir .tmp-omr/inspect && node .tmp-omr/inspect/inspect.js"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
