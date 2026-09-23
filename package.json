@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "node scripts/omr/fetch-models.mjs && tsc && vite build",
     "preview": "vite preview",
     "tauri": "cargo tauri",
     "check": "vite build -c vite.scripts.config.ts --ssr scripts/check.ts --outDir .tmp-check && node .tmp-check/check.js",
