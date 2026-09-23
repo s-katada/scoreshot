@@ -9,6 +9,9 @@
     "core:default",
     "fs:default",
     "fs:allow-appdata-read-recursive",
-    "fs:allow-appdata-write-recursive"
+    "fs:allow-appdata-write-recursive",
+    "dialog:default",
+    "fs:allow-read-file",
+    "fs:allow-write-file"
   ]
 }
