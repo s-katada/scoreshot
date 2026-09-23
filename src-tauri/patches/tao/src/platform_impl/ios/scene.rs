@@ -1,10 +1,9 @@
 // Copyright 2021-2025 Tauri Programme within The Commons Conservancy
 // SPDX-License-Identifier: Apache-2.0
 
-use objc2::{define_class, rc::Retained, MainThreadMarker, MainThreadOnly};
+use objc2::{define_class, MainThreadMarker, MainThreadOnly};
 use objc2_foundation::{
-  NSBundle, NSDictionary, NSError, NSNumber, NSObject, NSObjectProtocol, NSSet, NSString,
-  NSUserActivity,
+  NSBundle, NSError, NSObject, NSObjectProtocol, NSSet, NSString, NSUserActivity,
 };
 use objc2_ui_kit::{
   UIApplication, UIOpenURLContext, UIScene, UISceneConnectionOptions, UISceneDelegate,
@@ -17,7 +16,8 @@ use crate::{
   window::WindowId as RootWindowId,
 };
 
-// true when the system allows the app to display multiple scenes and multiple_scenes_enabled() returns true
+// true when the app enabled `UIApplicationSupportsMultipleScenes` in its Info.plist
+// and the device allows it to display multiple scenes
 // https://developer.apple.com/documentation/uikit/uiapplication/supportsmultiplescenes?language=objc
 pub unsafe fn app_supports_multiple_scenes() -> bool {
   let mtm = MainThreadMarker::new().unwrap();
@@ -25,26 +25,25 @@ pub unsafe fn app_supports_multiple_scenes() -> bool {
   application.supportsMultipleScenes()
 }
 
-// check whether the app's Info.plist enabled multiple scenes
-pub unsafe fn multiple_scenes_enabled() -> bool {
+// scoreshot: tao 0.37.0 から持ち込み (#7)。0.35.3 は `UIApplicationSupportsMultipleScenes`
+// が true のときしかシーンのライフサイクルとみなさず、false のアプリではウィンドウが
+// シーンにつながらずに画面が出なかった
+//
+// check whether the app adopted the scene lifecycle by declaring a
+// `UIApplicationSceneManifest` in its Info.plist
+//
+// such apps get their windows and their lifecycle callbacks from a `UISceneDelegate`
+// instead of the application delegate, so a `UIWindow` is only visible once it is
+// attached to a scene
+// https://developer.apple.com/documentation/bundleresources/information-property-list/uiapplicationscenemanifest
+pub unsafe fn scene_lifecycle_enabled() -> bool {
   let bundle = NSBundle::mainBundle();
   let Some(info) = bundle.infoDictionary() else {
     return false;
   };
 
   let key = NSString::from_str("UIApplicationSceneManifest");
-  let Some(manifest) = (*info).objectForKey(&key) else {
-    return false;
-  };
-
-  let manifest_dict = Retained::cast_unchecked::<NSDictionary<NSString, NSObject>>(manifest);
-  let supports_key = NSString::from_str("UIApplicationSupportsMultipleScenes");
-  let Some(value) = (*manifest_dict).objectForKey(&supports_key) else {
-    return false;
-  };
-
-  let num = Retained::cast_unchecked::<NSNumber>(value);
-  (*num).as_bool()
+  (*info).objectForKey(&key).is_some()
 }
 
 define_class!(
@@ -97,11 +96,20 @@ define_class!(
             }));
           }
         }
+        // scoreshot: シーンのライフサイクルでは applicationWillResignActive: が
+        // 呼ばれないので、ここで出す (0.37.0 はウィンドウごとの WindowEvent::Suspended
+        // に変えたが、tauri-runtime-wry 2 系が受けるのはこちら)
+        app_state::handle_nonuser_event(EventWrapper::StaticEvent(Event::Suspended));
       }
     }
 
     #[unsafe(method(sceneWillEnterForeground:))]
-    fn sceneWillEnterForeground(&self, _scene: &UIScene) {}
+    fn sceneWillEnterForeground(&self, _scene: &UIScene) {
+      // scoreshot: applicationWillEnterForeground: の代わり (上と同じ理由)
+      unsafe {
+        app_state::handle_nonuser_event(EventWrapper::StaticEvent(Event::Resumed));
+      }
+    }
 
     #[unsafe(method(sceneDidEnterBackground:))]
     fn sceneDidEnterBackground(&self, _scene: &UIScene) {}

@@ -29,3 +29,10 @@ tauri-plugin-dialog = "2.7.3"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSError"] }
 libc = "0.2"
+
+# iOS 27 で画面が出ない問題 (#7) を直すため、tao 0.37 の UIScene 対応を 0.35.3 に
+# 持ち込んだものを使う。Tauri 2 系は tao ^0.35 を要求していて 0.37 を使えない。
+# iOS のファイルしか変えていないので、macOS の動きは 0.35.3 と同じ。
+# Tauri 2 系が tao 0.37 以降に上がったら、これと patches/tao を消す (patches/README.md)
+[patch.crates-io]
+tao = { path = "patches/tao" }

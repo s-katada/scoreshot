@@ -9,7 +9,7 @@
 - **再生カーソルの寸法はインラインスタイルで当て直している**。Tailwind の preflight が `img { height: auto }` を当てるので、OSMD が height 属性で与える縦線が 1px に潰れる。CSS では属性値に戻せないため JS で当てるしかない
 - `osmd.cursor` は `render()` が走るまで存在しない。描画前に触ると例外が飛んでアプリが白画面になる
 - **nix の devShell は Apple のツールチェーンを覆い隠す**。`xcrun` が 2019 年製スタブに、`DEVELOPER_DIR` / `SDKROOT` が nix の SDK に奪われる。`flake.nix` の shellHook で打ち消しているので、iOS 関連は必ず `nix develop` 経由で叩く(シェル外から使うときは `/usr/bin/xcrun`)
-- iOS はビルド・起動・フロントエンド読み込みまで通るが**画面が出ない**(iOS 27 の UIScene 必須化に wry/tao が未対応 / #7)。上流待ちなので動作確認は macOS で行う
+- iOS 27 の UIScene 必須化で画面が出なかった問題(#7)は、tao 0.37 の修正を 0.35.3 に持ち込んだもの(`src-tauri/patches/tao`)を `[patch.crates-io]` で使って直した。Tauri 2 系は tao 0.35 のままなので。iOS のシミュレータ・実機ではまだ確かめていない。Tauri 2 系が tao 0.37 以降に上がったら消す(`src-tauri/patches/README.md`)
 - Xcode のビルドスクリプトは環境が消毒されて nix の変数も PATH も届かないため、`src-tauri/gen/apple/project.yml` で `nix develop` に入り直している。`gen/apple` を消して再生成するとこの修正が失われる
 - ピアノ音源は `public/samples/piano/` に 2MB 同梱(Salamander Grand Piano / CC-BY 3.0)。音色の差し替え口は `src/audio/player.ts` の `loadInstrument()` に閉じてある
 - 編集は `src/model/edit.ts` の関数で行い、どれも新しい `Score` を返す(元は変えない)。**各段は小節をちょうど埋める**(音を置いたり消したりしたら休符で詰め直す)のが不変条件。Undo/Redo は `Score` のスナップショットを積む(`src/state/useHistory.ts`)
