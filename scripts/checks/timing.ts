@@ -1,7 +1,7 @@
 import { sampleScore } from "../../src/model/sample";
 import { scoreToMusicXml } from "../../src/model/musicxml";
 import { staffQuarterLength } from "../../src/model/score";
-import { scoreToTimedNotes, scoreQuarterLength } from "../../src/audio/player";
+import { notesFrom, scoreToTimedNotes, scoreQuarterLength } from "../../src/audio/player";
 import { check, section } from "./harness";
 
 section("楽譜モデルと再生時刻");
@@ -35,3 +35,15 @@ const backups = [...xml.matchAll(/<backup>\s*<duration>(\d+)<\/duration>/g)].map
 check("backup の数と値", backups.length === 4 && backups.every((d) => d === 1920), backups.join(","));
 check("staves 宣言", xml.includes("<staves>2</staves>"));
 check("和音の chord 要素", (xml.match(/<chord\/>/g) ?? []).length === 8, `${(xml.match(/<chord\/>/g) ?? []).length} 個`);
+
+// 途中からの再生 (#12)
+{
+  const from5 = notesFrom(sampleScore, 5);
+  // 2 小節目の 2 拍目 (曲頭から 5 拍) からは A4 が 0 拍目、G4 が 1 拍目。
+  // 4 拍目から鳴り続けている和音 (C3 F3 A3) は含めない
+  check("途中から: 最初の音", JSON.stringify(from5.slice(0, 2).map((n) => [n.name, n.at])) === '[["A4",0],["G4",1]]',
+    JSON.stringify(from5.slice(0, 2).map((n) => [n.name, n.at])));
+  check("途中から: またぐ音は鳴らさない", !from5.some((n) => n.at < 0) && !from5.some((n) => n.name === "F3" && n.at === -1));
+  check("途中から: 3 小節目の和音は 3 拍後", from5.filter((n) => n.at === 3).length === 4, from5.filter((n) => n.at === 3).map((n) => n.name).join(" "));
+  check("頭からは全部", notesFrom(sampleScore, 0).length === 26);
+}

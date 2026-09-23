@@ -69,6 +69,19 @@ export function scoreToTimedNotes(score: Score): TimedNote[] {
   return out.sort((a, b) => a.at - b.at);
 }
 
+/**
+ * 開始位置 startAt (曲頭からの四分音符単位) から鳴らす音を並べる。
+ * 時刻は開始位置を 0 とする。
+ *
+ * 開始位置より前から鳴り続けている音 (開始位置をまたぐ長い音) は含めない。
+ * 途中から聴き始めるときに、弾き直していない音が急に鳴り出すのを避ける。
+ */
+export function notesFrom(score: Score, startAt: number): TimedNote[] {
+  return scoreToTimedNotes(score)
+    .filter((n) => n.at >= startAt - 1e-9)
+    .map((n) => ({ ...n, at: n.at - startAt }));
+}
+
 /** 曲全体の長さ (四分音符単位) */
 export function scoreQuarterLength(score: Score): number {
   return score.measures.length * measureQuarterLength(score.time);
@@ -144,10 +157,12 @@ let endTimeoutId: number | null = null;
 let positionFrameId: number | null = null;
 
 export interface PlayOptions {
+  /** 曲頭からの開始位置 (四分音符単位)。省略すると頭から */
+  startAt?: number;
   /** 最後の音が鳴り終わったときに呼ばれる */
   onEnded?: () => void;
   /**
-   * 再生位置を四分音符単位で毎フレーム通知する。
+   * 再生位置を曲頭からの四分音符単位で毎フレーム通知する。
    * 楽譜上のカーソルを追従させるために使う。
    */
   onPosition?: (quarterPosition: number) => void;
@@ -174,7 +189,11 @@ export function stop(): void {
 }
 
 /**
- * 楽譜を頭から再生する。
+ * 楽譜を再生する。startAt を渡すとその位置から始める。
+ *
+ * 一時停止は「止めて位置を覚えておき、次はそこから再生する」で実現する
+ * (呼び出し側)。止めている間に楽譜が編集されても、再開したときは新しい
+ * 楽譜を鳴らせる。
  */
 export async function play(
   score: Score,
@@ -190,7 +209,8 @@ export async function play(
   // テンポは曲中で変わらない前提。曲中のテンポ変更に対応するときは
   // ここを Tone の拍表記に置き換える。
   const secondsPerQuarter = 60 / score.tempo;
-  const notes = scoreToTimedNotes(score);
+  const startAt = Math.max(0, options.startAt ?? 0);
+  const notes = notesFrom(score, startAt);
 
   currentPart = new Tone.Part<ScheduledNote>(
     (time, note) => {
@@ -206,17 +226,18 @@ export async function play(
   currentPart.start(0);
   transport.start();
 
-  // 再生位置の通知。Transport の経過秒をそのまま拍に直している
+  // 再生位置の通知。Transport の経過秒を拍に直し、開始位置を足す
   if (options.onPosition) {
     const report = options.onPosition;
     const tick = () => {
-      report(transport.seconds / secondsPerQuarter);
+      report(startAt + transport.seconds / secondsPerQuarter);
       positionFrameId = requestAnimationFrame(tick);
     };
     positionFrameId = requestAnimationFrame(tick);
   }
 
-  const totalSeconds = scoreQuarterLength(score) * secondsPerQuarter;
+  const totalSeconds =
+    Math.max(0, scoreQuarterLength(score) - startAt) * secondsPerQuarter;
   endTimeoutId = window.setTimeout(() => {
     stop();
     options.onEnded?.();
