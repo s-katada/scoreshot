@@ -2,3 +2,7 @@
 # headless WebGL。ブラウザ/WebView では使わないのでビルドしない。
 ignoredBuiltDependencies:
   - gl
+# pnpm 12 は許可も拒否もされていないビルドをエラーにするため、
+# 拒否を明示しておく (ignoredBuiltDependencies は pnpm 10 向けに残す)
+allowBuilds:
+  gl: false
