@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Banner } from "./components/Banner";
+import { ConfirmButton } from "./components/ConfirmButton";
 import { ScoreView } from "./components/ScoreView";
 import { primaryButtonClass } from "./components/styles";
 import { loadInstrument, play, playNote, stop } from "./audio/player";
@@ -111,6 +112,13 @@ export default function App() {
     void playNote(frequency);
   }, []);
 
+  const resetToSample = useCallback(() => {
+    stop();
+    setPlaying(false);
+    setPosition(null);
+    setScore(sampleScore);
+  }, []);
+
   return (
     <main className="mx-auto flex min-h-dvh max-w-4xl flex-col gap-6 px-4 py-8">
       <header className="flex items-end justify-between gap-4">
@@ -159,6 +167,14 @@ export default function App() {
             {tempoInput} BPM
           </span>
         </label>
+
+        <ConfirmButton
+          onConfirm={resetToSample}
+          confirmLabel="サンプルに戻す"
+          disabled={loaded === null}
+        >
+          サンプルに戻す
+        </ConfirmButton>
       </section>
 
       {loaded === null ? (
