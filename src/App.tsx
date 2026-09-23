@@ -3,6 +3,7 @@ import { Banner } from "./components/Banner";
 import { ConfirmButton } from "./components/ConfirmButton";
 import { EditorToolbar } from "./components/EditorToolbar";
 import { FileMenu } from "./components/FileMenu";
+import { LibraryPanel } from "./components/LibraryPanel";
 import { NewScoreForm } from "./components/NewScoreForm";
 import { ScoreSettings } from "./components/ScoreSettings";
 import { ScoreView } from "./components/ScoreView";
@@ -12,6 +13,7 @@ import { playNote } from "./audio/player";
 import { usePlayback } from "./audio/usePlayback";
 import { useKeyboardShortcuts } from "./editor/useKeyboardShortcuts";
 import { useScoreEditor } from "./editor/useScoreEditor";
+import { setTitle } from "./model/edit";
 import { scoreToMidi } from "./model/midi";
 import { scoreToMusicXml } from "./model/musicxml";
 import { readMusicXmlFile } from "./model/musicxmlFile";
@@ -21,6 +23,18 @@ import { sampleScore } from "./model/sample";
 import { measureQuarterLength, type Score } from "./model/score";
 import { useHistory } from "./state/useHistory";
 import {
+  addScore,
+  deleteScore,
+  listScores,
+  openLibrary,
+  readScore,
+  rememberLastOpened,
+  scoreFileName,
+  writeScore,
+  type LibraryEntry,
+} from "./storage/library";
+import { useAutoSave, type SaveStatus } from "./storage/persist";
+import {
   MIDI_FILE,
   MUSICXML_FILE,
   openFile,
@@ -29,12 +43,6 @@ import {
   type FileType,
 } from "./storage/userFiles";
 import { describeError } from "./util/errors";
-import {
-  loadSavedScore,
-  useAutoSave,
-  type LoadedScore,
-  type SaveStatus,
-} from "./storage/persist";
 
 function saveStatusLabel(status: SaveStatus): string {
   switch (status.state) {
@@ -49,44 +57,79 @@ function saveStatusLabel(status: SaveStatus): string {
   }
 }
 
+/**
+ * 開いている楽譜。baseline はファイルに書かれていると分かっている中身。
+ * id が null なら保存しない (保存先に触れなかったとき)
+ */
+interface OpenScore {
+  id: string | null;
+  baseline: Score;
+}
+
+type Notice = { tone: "error" | "info"; text: string };
+
 export default function App() {
   // 楽譜そのもの。描画・再生・保存はすべてここから生やす。
   // 編集のたびにスナップショットを積み、Undo/Redo で行き来する
   const history = useHistory<Score>(sampleScore);
   const score = history.value;
   const resetHistory = history.reset;
-  // 起動時の復元結果。null の間は読み込み中
-  const [loaded, setLoaded] = useState<LoadedScore | null>(null);
+  // null の間は読み込み中
+  const [current, setCurrent] = useState<OpenScore | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [entries, setEntries] = useState<LibraryEntry[]>([]);
   const [creating, setCreating] = useState(false);
-  // 読み込み・書き出しの結果のお知らせ
-  const [notice, setNotice] = useState<{ tone: "error" | "info"; text: string } | null>(null);
+  // 読み込み・書き出しなどの結果のお知らせ
+  const [notice, setNotice] = useState<Notice | null>(null);
   // スライダーを動かしている間の値と、楽譜に反映する値を分けている。
   // テンポは MusicXML のメトロノーム記号に載るため、確定させずに反映すると
   // つまみを動かすたびに OSMD の再レイアウトが走ってしまう。
   const [tempoInput, setTempoInput] = useState(score.tempo);
   const playback = usePlayback(score);
 
-  // 前回の楽譜を復元する。無ければ、または壊れていればサンプルのまま
+  const autoSave = useAutoSave(
+    current === null ? null : score,
+    current?.baseline ?? null,
+    current?.id ? scoreFileName(current.id) : null,
+  );
+  const saveStatus = autoSave.status;
+
+  const refreshEntries = useCallback(async () => {
+    try {
+      setEntries(await listScores());
+    } catch (error) {
+      setNotice({ tone: "error", text: `楽譜の一覧を読めませんでした。\n${describeError(error)}` });
+    }
+  }, []);
+
+  // 前回開いていた楽譜を開く。無ければ、または壊れていればサンプル
   useEffect(() => {
     let cancelled = false;
-    void loadSavedScore().then((result) => {
-      if (cancelled) {
-        return;
-      }
-      resetHistory(result.score);
-      setLoaded(result);
-      setLoadError(result.error ?? null);
-    });
+    void openLibrary()
+      .then((opened) => {
+        if (cancelled) {
+          return;
+        }
+        resetHistory(opened.score);
+        setCurrent({ id: opened.id, baseline: opened.score });
+        setLoadError(opened.error ?? null);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        // 保存先に触れないときも、サンプルで編集はできるようにする (保存はしない)
+        resetHistory(sampleScore);
+        setCurrent({ id: null, baseline: sampleScore });
+        setLoadError(
+          `保存された楽譜を読み込めませんでした。サンプルを表示しています (保存はされません)。\n${describeError(error)}`,
+        );
+      });
     return () => {
       cancelled = true;
     };
   }, [resetHistory]);
-
-  const saveStatus = useAutoSave(
-    loaded === null ? null : score,
-    loaded?.inSync ? loaded.score : null,
-  );
 
   // 楽譜が差し替わったとき (復元・編集など) はスライダーを追従させる
   useEffect(() => {
@@ -94,9 +137,7 @@ export default function App() {
   }, [score.tempo]);
 
   const commitTempo = useCallback(() => {
-    history.update((current) =>
-      current.tempo === tempoInput ? current : { ...current, tempo: tempoInput },
-    );
+    history.update((s) => (s.tempo === tempoInput ? s : { ...s, tempo: tempoInput }));
   }, [history, tempoInput]);
 
   const editor = useScoreEditor({
@@ -107,7 +148,7 @@ export default function App() {
   useKeyboardShortcuts({
     editor,
     togglePlayback: playback.toggle,
-    enabled: loaded !== null,
+    enabled: current !== null,
   });
 
   // 選んでいる音符の位置 (曲頭からの四分音符単位)。そこから再生できる
@@ -116,6 +157,109 @@ export default function App() {
       ? null
       : editor.selected.measureIndex * measureQuarterLength(score.time) +
         editor.selected.event.onset;
+
+  const stopPlayback = playback.stop;
+  const clearSelection = editor.clearSelection;
+  const flushSave = autoSave.flush;
+
+  /**
+   * ライブラリの別の楽譜に切り替える。元に戻す履歴は楽譜ごとに捨てる。
+   *
+   * 呼ぶ前に flushSave で今の楽譜を保存しきること。自動保存の待ち時間の
+   * 間にした編集を失わないように。
+   */
+  const switchTo = useCallback(
+    (id: string, next: Score) => {
+      stopPlayback();
+      clearSelection();
+      resetHistory(next);
+      setCurrent({ id, baseline: next });
+      void rememberLastOpened(id).catch(() => {
+        // 覚えられなくても、次の起動で最近の楽譜が開くだけ
+      });
+    },
+    [stopPlayback, clearSelection, resetHistory],
+  );
+
+  const openScore = useCallback(
+    async (id: string) => {
+      await flushSave();
+      try {
+        switchTo(id, await readScore(id));
+        setLibraryOpen(false);
+      } catch (error) {
+        setNotice({ tone: "error", text: `楽譜を開けませんでした。\n${describeError(error)}` });
+      }
+      void refreshEntries();
+    },
+    [flushSave, switchTo, refreshEntries],
+  );
+
+  /** 新しい楽譜としてライブラリに足し、それを開く */
+  const addAndOpen = useCallback(
+    async (next: Score) => {
+      await flushSave();
+      const id = await addScore(next);
+      switchTo(id, next);
+      void refreshEntries();
+    },
+    [flushSave, switchTo, refreshEntries],
+  );
+
+  const duplicateScore = useCallback(
+    async (id: string) => {
+      await flushSave();
+      try {
+        const source = id === current?.id ? score : await readScore(id);
+        await addScore({ ...source, title: `${source.title} のコピー` });
+      } catch (error) {
+        setNotice({ tone: "error", text: `楽譜を複製できませんでした。\n${describeError(error)}` });
+      }
+      void refreshEntries();
+    },
+    [flushSave, current, score, refreshEntries],
+  );
+
+  const renameScore = useCallback(
+    async (id: string, title: string) => {
+      if (id === current?.id) {
+        // 開いている楽譜は編集として変える (元に戻せ、自動で保存される)
+        editor.editScore((s) => setTitle(s, title));
+        return;
+      }
+      try {
+        await writeScore(id, setTitle(await readScore(id), title));
+      } catch (error) {
+        setNotice({ tone: "error", text: `名前を変えられませんでした。\n${describeError(error)}` });
+      }
+      void refreshEntries();
+    },
+    [current, editor, refreshEntries],
+  );
+
+  const removeScore = useCallback(
+    async (id: string) => {
+      try {
+        if (id === current?.id) {
+          await flushSave();
+          await deleteScore(id);
+          // 開いていた楽譜を消したら、残りのうち最近のものを開く
+          const rest = (await listScores()).filter((e) => e.broken === undefined);
+          if (rest.length > 0) {
+            switchTo(rest[0].id, await readScore(rest[0].id));
+          } else {
+            switchTo(await addScore(sampleScore), sampleScore);
+          }
+        } else {
+          await deleteScore(id);
+        }
+      } catch (error) {
+        setNotice({ tone: "error", text: `楽譜を削除できませんでした。\n${describeError(error)}` });
+      }
+      void refreshEntries();
+    },
+    [current, flushSave, switchTo, refreshEntries],
+  );
 
   /** 楽譜を形式 label のファイルに書き出す */
   const exportScore = useCallback(
@@ -145,15 +289,14 @@ export default function App() {
     [exportScore, score],
   );
 
-  /** 楽譜を丸ごと差し替える。履歴に積むので元に戻せる */
-  const stopPlayback = playback.stop;
+  /** 開いている楽譜を丸ごと差し替える。履歴に積むので元に戻せる */
   const replaceScore = useCallback(
     (next: Score) => {
       stopPlayback();
-      editor.clearSelection();
+      clearSelection();
       history.update(() => next);
     },
-    [history, editor, stopPlayback],
+    [history, clearSelection, stopPlayback],
   );
 
   const resetToSample = useCallback(() => replaceScore(sampleScore), [replaceScore]);
@@ -171,10 +314,8 @@ export default function App() {
     }
     try {
       const { score: imported, warnings } = readMusicXmlFile(picked.name, picked.bytes);
-      replaceScore(imported);
-      const lines = [
-        `「${imported.title}」を読み込み、今の楽譜と置き換えました (元に戻すで戻せます)。`,
-      ];
+      await addAndOpen(imported);
+      const lines = [`「${imported.title}」を読み込み、新しい楽譜として楽譜一覧に足しました。`];
       if (warnings.length > 0) {
         lines.push("", "読み込めなかったもの・変えて読み込んだもの:", ...warnings.map((w) => `・${w}`));
       }
@@ -186,15 +327,29 @@ export default function App() {
           : `思わぬエラーです: ${describeError(error)}`;
       setNotice({ tone: "error", text: `「${picked.name}」を読み込めませんでした。\n${reason}` });
     }
-  }, [replaceScore]);
+  }, [addAndOpen]);
 
   const createScore = useCallback(
-    (options: NewScoreOptions) => {
-      replaceScore(createEmptyScore(options));
+    async (options: NewScoreOptions) => {
       setCreating(false);
+      setLibraryOpen(false);
+      try {
+        await addAndOpen(createEmptyScore(options));
+      } catch (error) {
+        setNotice({ tone: "error", text: `楽譜を作れませんでした。\n${describeError(error)}` });
+      }
     },
-    [replaceScore],
+    [addAndOpen],
   );
+
+  const toggleLibrary = useCallback(() => {
+    if (!libraryOpen) {
+      void refreshEntries();
+    }
+    setLibraryOpen(!libraryOpen);
+  }, [libraryOpen, refreshEntries]);
+
+  const ready = current !== null;
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-4xl flex-col gap-6 px-4 py-8">
@@ -222,6 +377,64 @@ export default function App() {
         </Banner>
       )}
 
+      <section className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={toggleLibrary}
+          disabled={!ready}
+          aria-expanded={libraryOpen}
+          className={secondaryButtonClass}
+        >
+          楽譜一覧
+        </button>
+        <button
+          type="button"
+          onClick={() => setCreating((c) => !c)}
+          disabled={!ready}
+          aria-expanded={creating}
+          className={secondaryButtonClass}
+        >
+          新規作成
+        </button>
+        <ConfirmButton
+          onConfirm={resetToSample}
+          confirmLabel="サンプルに戻す"
+          message="開いている楽譜がサンプルに置き換わります (元に戻すで戻せます)。"
+          disabled={!ready}
+        >
+          サンプルに戻す
+        </ConfirmButton>
+        <FileMenu
+          onImportMusicXml={() => void importMusicXml()}
+          onExportMusicXml={() => void exportMusicXml()}
+          onExportMidi={() => void exportMidi()}
+          disabled={!ready}
+        />
+      </section>
+
+      {creating && (
+        <NewScoreForm
+          onCreate={(options) => void createScore(options)}
+          onCancel={() => setCreating(false)}
+          submitLabel="作成"
+          notice="新しい楽譜として楽譜一覧に足し、それを開きます。"
+        />
+      )}
+
+      {libraryOpen && (
+        <LibraryPanel
+          entries={entries}
+          currentId={current?.id ?? null}
+          currentTitle={score.title}
+          onOpen={(id) => void openScore(id)}
+          onDuplicate={(id) => void duplicateScore(id)}
+          onRename={(id, title) => void renameScore(id, title)}
+          onDelete={(id) => void removeScore(id)}
+          onCreate={() => setCreating(true)}
+          onClose={() => setLibraryOpen(false)}
+        />
+      )}
+
       <TransportControls
         playback={playback}
         selectionPosition={selectionPosition}
@@ -230,43 +443,7 @@ export default function App() {
         onTempoCommit={commitTempo}
       />
 
-      <section className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => setCreating((c) => !c)}
-          disabled={loaded === null}
-          aria-expanded={creating}
-          className={secondaryButtonClass}
-        >
-          新規作成
-        </button>
-
-        <ConfirmButton
-          onConfirm={resetToSample}
-          confirmLabel="サンプルに戻す"
-          disabled={loaded === null}
-        >
-          サンプルに戻す
-        </ConfirmButton>
-
-        <FileMenu
-          onImportMusicXml={() => void importMusicXml()}
-          onExportMusicXml={() => void exportMusicXml()}
-          onExportMidi={() => void exportMidi()}
-          disabled={loaded === null}
-        />
-      </section>
-
-      {creating && (
-        <NewScoreForm
-          onCreate={createScore}
-          onCancel={() => setCreating(false)}
-          submitLabel="作成して置き換える"
-          notice="今の楽譜は置き換わります (元に戻すで戻せます)。"
-        />
-      )}
-
-      {loaded === null ? (
+      {!ready ? (
         <p className="text-sm opacity-60">楽譜を読み込み中…</p>
       ) : (
         <>
