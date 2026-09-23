@@ -93,9 +93,10 @@ export function resizeGray(image: GrayImage, scale: number): GrayImage {
  * 紙の地を白に揃える (写真の照明のむらや紙の色を消す)。
  *
  * 画像を升目に切り、升目ごとに明るい方の画素 (上位 10%) の値を紙の地の
- * 明るさとみなす。升目がまるごと記号で埋まることもあるので、周りの升目
- * のうち明るいものも見る。これを滑らかにつないで割ることで、地は 255 に、
- * インクは地との比で暗いまま残る。
+ * 明るさとみなす。升目がまるごと記号で埋まっていると暗く出るので、周りの
+ * 升目よりはっきり暗い升目は周りの明るい方の値に置き換える。これを
+ * 滑らかにつないで割ることで、地は 255 に、インクは地との比で暗いまま
+ * 残る。
  */
 export function flattenBackground(image: GrayImage): GrayImage {
   const { width, height, data } = image;
@@ -123,7 +124,8 @@ export function flattenBackground(image: GrayImage): GrayImage {
       paper[row * columns + column] = value;
     }
   }
-  // 周りの升目の明るい方をとる
+  // 記号で埋まった升目 (周りよりはっきり暗い) は、周りの明るい方で置き換える。
+  // 照明のむらのようななだらかな変化はそのまま残す
   const spread = new Float32Array(paper.length);
   for (let row = 0; row < rows; row++) {
     for (let column = 0; column < columns; column++) {
@@ -137,7 +139,8 @@ export function flattenBackground(image: GrayImage): GrayImage {
           }
         }
       }
-      spread[row * columns + column] = Math.max(1, best);
+      const own = paper[row * columns + column];
+      spread[row * columns + column] = Math.max(1, own >= best * 0.8 ? own : best);
     }
   }
   const out = new Uint8Array(data.length);
