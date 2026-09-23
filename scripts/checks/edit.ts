@@ -7,7 +7,10 @@ import {
   removeMeasure,
   removeNote,
   setEventDuration,
+  setKeySignature,
   setNotePitch,
+  setTimeSignature,
+  setTitle,
   snapOnset,
   staffEvents,
   toggleRest,
@@ -140,4 +143,21 @@ section("新規作成");
   check("新規作成は約束事を満たす", scoreProblems(created).length === 0, scoreProblems(created).join(" / "));
   checkStaff("新規作成の小節は休符だけ", created, 7, 2, "rest:half.@0");
   check("小節の id は重複しない", new Set(created.measures.map((m) => m.id)).size === 8);
+}
+
+section("楽譜の設定");
+{
+  const created = createEmptyScore({ title: "新しい曲", tempo: 90, fifths: 2, time: { beats: 3, beatType: 4 }, measures: 8 });
+  check("タイトルを変える", setTitle(created, "別の曲").title === "別の曲");
+  check("調号を変えても音は変えない", JSON.stringify(setKeySignature(sampleScore, 3).measures) === JSON.stringify(sampleScore.measures));
+  checkThrows("調号の範囲外", () => setKeySignature(sampleScore, 8), "調号は");
+
+  const to44 = setTimeSignature(created, { beats: 4, beatType: 4 });
+  checkStaff("3/4 → 4/4 は休符を足す", to44, 0, 1, "rest:whole@0");
+  checkThrows("音符が収まらない", () => setTimeSignature(sampleScore, { beats: 3, beatType: 4 }), "1 小節目の音符が 3/4 拍子の小節に収まりません");
+  const to54 = setTimeSignature(sampleScore, { beats: 5, beatType: 4 });
+  checkStaff("4/4 → 5/4 は末尾に休符", to54, 0, 1, "C4:quarter@0 C4:quarter@1 G4:quarter@2 G4:quarter@3 rest:quarter@4");
+  const trimmed = setTimeSignature(placeNotes(empty44, { measureIndex: 0, staff: 1, onset: 0 }, [C4], half).score, { beats: 2, beatType: 4 });
+  checkStaff("末尾の休符だけなら削って縮める", trimmed, 0, 1, "C4:half@0");
+  check("拍子を変えた楽譜は約束事を満たす", scoreProblems(to54).length === 0 && scoreProblems(trimmed).length === 0);
 }
