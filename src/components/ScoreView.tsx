@@ -604,7 +604,9 @@ export function ScoreView({
     }
     // next() や show() のたびに OSMD が属性を書き直すので毎回当て直す
     applyCursorSize(cursor.cursorElement);
-  }, [playbackPosition]);
+    // renderCount: 描き直すとカーソルが隠れて頭に戻るので、一時停止中でも
+    // 描き直しのたびに置き直す
+  }, [playbackPosition, renderCount]);
 
   const handleClick = useCallback(
     (event: React.MouseEvent) => {
