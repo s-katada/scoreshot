@@ -2,16 +2,20 @@ import { useCallback, useEffect, useState } from "react";
 import { Banner } from "./components/Banner";
 import { ConfirmButton } from "./components/ConfirmButton";
 import { EditorToolbar } from "./components/EditorToolbar";
+import { FileMenu } from "./components/FileMenu";
 import { NewScoreForm } from "./components/NewScoreForm";
 import { ScoreSettings } from "./components/ScoreSettings";
 import { ScoreView } from "./components/ScoreView";
 import { primaryButtonClass, secondaryButtonClass } from "./components/styles";
 import { loadInstrument, play, playNote, stop } from "./audio/player";
 import { useScoreEditor } from "./editor/useScoreEditor";
+import { scoreToMusicXml } from "./model/musicxml";
 import { createEmptyScore, type NewScoreOptions } from "./model/newScore";
 import { sampleScore } from "./model/sample";
 import type { Score } from "./model/score";
 import { useHistory } from "./state/useHistory";
+import { MUSICXML_FILE, safeFileName, saveFileAs } from "./storage/userFiles";
+import { describeError } from "./util/errors";
 import {
   loadSavedScore,
   useAutoSave,
@@ -42,6 +46,8 @@ export default function App() {
   const [loaded, setLoaded] = useState<LoadedScore | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // 読み込み・書き出しの結果のお知らせ
+  const [notice, setNotice] = useState<{ tone: "error" | "info"; text: string } | null>(null);
   // スライダーを動かしている間の値と、楽譜に反映する値を分けている。
   // テンポは MusicXML のメトロノーム記号に載るため、確定させずに反映すると
   // つまみを動かすたびに OSMD の再レイアウトが走ってしまう。
@@ -120,6 +126,24 @@ export default function App() {
     });
   }, [playing, score]);
 
+  const exportMusicXml = useCallback(async () => {
+    try {
+      const saved = await saveFileAs(
+        `${safeFileName(score.title)}.musicxml`,
+        scoreToMusicXml(score),
+        MUSICXML_FILE,
+      );
+      if (saved) {
+        setNotice({ tone: "info", text: "MusicXML に書き出しました。" });
+      }
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        text: `MusicXML に書き出せませんでした。\n${describeError(error)}`,
+      });
+    }
+  }, [score]);
+
   /** 楽譜を丸ごと差し替える。履歴に積むので元に戻せる */
   const replaceScore = useCallback(
     (next: Score) => {
@@ -161,6 +185,11 @@ export default function App() {
       )}
       {saveStatus.state === "error" && (
         <Banner tone="error">{saveStatus.message}</Banner>
+      )}
+      {notice !== null && (
+        <Banner tone={notice.tone} onDismiss={() => setNotice(null)}>
+          {notice.text}
+        </Banner>
       )}
 
       <section className="flex flex-wrap items-center gap-6">
@@ -208,6 +237,11 @@ export default function App() {
         >
           サンプルに戻す
         </ConfirmButton>
+
+        <FileMenu
+          onExportMusicXml={() => void exportMusicXml()}
+          disabled={loaded === null}
+        />
       </section>
 
       {creating && (

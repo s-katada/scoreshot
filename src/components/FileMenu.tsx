@@ -1,0 +1,26 @@
+/**
+ * 楽譜をファイルとして読み込む・書き出すボタン。
+ */
+
+import { secondaryButtonClass } from "./styles";
+
+interface FileMenuProps {
+  onExportMusicXml: () => void;
+  disabled?: boolean;
+}
+
+export function FileMenu({ onExportMusicXml, disabled }: FileMenuProps) {
+  return (
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="ファイル">
+      <button
+        type="button"
+        onClick={onExportMusicXml}
+        disabled={disabled}
+        className={secondaryButtonClass}
+        title="MuseScore などで開ける MusicXML に書き出す"
+      >
+        MusicXML に書き出す
+      </button>
+    </div>
+  );
+}
