@@ -103,8 +103,8 @@ export function OmrPanel({ onRecognized, onClose }: OmrPanelProps) {
         <div className="flex flex-col gap-1">
           <h2 className="font-medium">画像から読み取る</h2>
           <p className="opacity-60">
-            楽譜の写真やスキャン画像から楽譜を読み取り、新しい楽譜として楽譜一覧に足します。
-            読み取りは完全ではないので、再生して確かめ、違う所は編集で直してください。
+            {"楽譜の写真やスキャン画像から楽譜を読み取り、新しい楽譜として楽譜一覧に足します。" +
+              "読み取りは完全ではないので、再生して確かめ、違う所は編集で直してください。"}
           </p>
         </div>
         <button type="button" onClick={onClose} className="shrink-0 opacity-60 hover:opacity-100" aria-label="閉じる">
