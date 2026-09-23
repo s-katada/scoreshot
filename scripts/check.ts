@@ -3,6 +3,7 @@
  */
 import "./checks/timing";
 import "./checks/storage";
+import "./checks/edit";
 import { finish } from "./checks/harness";
 
 finish();
