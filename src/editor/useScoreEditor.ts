@@ -35,10 +35,13 @@ import {
   PIANO_HIGHEST,
   PIANO_LOWEST,
   diatonicNumber,
+  keyAlter,
   pitchFromDiatonic,
+  withAlter,
 } from "../model/pitch";
 import {
   pitchToName,
+  type Alter,
   type NoteType,
   type Pitch,
   type Score,
@@ -278,6 +281,30 @@ export function useScoreEditor({ history, onSound }: Options) {
     [selected, score.key.fifths, apply, sound],
   );
 
+  /**
+   * 選んでいる音符に ♯ / ♭ / ♮ を付ける。同じ記号をもう一度押すと外し、
+   * 調号どおりの高さに戻す。
+   */
+  const setAccidental = useCallback(
+    (alter: Alter) => {
+      if (selected === null || selected.note.pitch === null) {
+        return;
+      }
+      const current = selected.note.pitch;
+      const next =
+        (current.alter ?? 0) === alter ? keyAlter(current.step, score.key.fifths) : alter;
+      if (next === (current.alter ?? 0)) {
+        return;
+      }
+      const pitch = withAlter(current, next);
+      const result = apply((s) => setNotePitch(s, selected.note.id, pitch));
+      if (result !== null) {
+        sound(pitch);
+      }
+    },
+    [selected, score.key.fifths, apply, sound],
+  );
+
   const toggleSelectedRest = useCallback(() => {
     if (selected === null) {
       return;
@@ -346,6 +373,7 @@ export function useScoreEditor({ history, onSound }: Options) {
     handleHover: setHover,
     editScore,
     moveSelection,
+    setAccidental,
     toggleSelectedRest,
     deleteSelected,
     addMeasure,

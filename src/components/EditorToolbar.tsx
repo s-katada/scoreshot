@@ -60,6 +60,7 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
 export function EditorToolbar({ editor }: { editor: ScoreEditor }) {
   const { palette, selected, mode } = editor;
   const hasPitch = selected !== null && selected.note.pitch !== null;
+  const alter = hasPitch ? (selected.note.pitch?.alter ?? 0) : null;
 
   return (
     <section className="flex flex-col gap-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
@@ -130,6 +131,15 @@ export function EditorToolbar({ editor }: { editor: ScoreEditor }) {
           </ToolButton>
           <ToolButton onClick={() => editor.moveSelection(-7)} disabled={!hasPitch} title="1 オクターブ下げる">
             8va↓
+          </ToolButton>
+          <ToolButton onClick={() => editor.setAccidental(1)} disabled={!hasPitch} active={alter === 1} title="♯ を付ける (もう一度押すと外す)">
+            ♯
+          </ToolButton>
+          <ToolButton onClick={() => editor.setAccidental(-1)} disabled={!hasPitch} active={alter === -1} title="♭ を付ける (もう一度押すと外す)">
+            ♭
+          </ToolButton>
+          <ToolButton onClick={() => editor.setAccidental(0)} disabled={!hasPitch} active={alter === 0} title="♮ にする (もう一度押すと調号どおりに戻す)">
+            ♮
           </ToolButton>
           <ToolButton onClick={editor.toggleSelectedRest} disabled={selected === null} title="休符と音符を入れ替える">
             休符⇄音符
