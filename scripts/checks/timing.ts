@@ -1,13 +1,10 @@
-import { sampleScore } from "../src/model/sample";
-import { scoreToMusicXml } from "../src/model/musicxml";
-import { staffQuarterLength } from "../src/model/score";
-import { scoreToTimedNotes, scoreQuarterLength } from "../src/audio/player";
+import { sampleScore } from "../../src/model/sample";
+import { scoreToMusicXml } from "../../src/model/musicxml";
+import { staffQuarterLength } from "../../src/model/score";
+import { scoreToTimedNotes, scoreQuarterLength } from "../../src/audio/player";
+import { check, section } from "./harness";
 
-let ng = 0;
-const check = (label: string, ok: boolean, detail = "") => {
-  if (!ok) ng++;
-  console.log(`${ok ? "OK  " : "NG  "} ${label}${detail ? "  " + detail : ""}`);
-};
+section("楽譜モデルと再生時刻");
 
 // 各小節が上下段とも 4 拍ぶん埋まっているか
 for (const [i, m] of sampleScore.measures.entries()) {
@@ -38,5 +35,3 @@ const backups = [...xml.matchAll(/<backup>\s*<duration>(\d+)<\/duration>/g)].map
 check("backup の数と値", backups.length === 4 && backups.every((d) => d === 1920), backups.join(","));
 check("staves 宣言", xml.includes("<staves>2</staves>"));
 check("和音の chord 要素", (xml.match(/<chord\/>/g) ?? []).length === 8, `${(xml.match(/<chord\/>/g) ?? []).length} 個`);
-
-console.log(ng === 0 ? "\n全項目 OK" : `\n${ng} 件 NG`);
