@@ -18,6 +18,9 @@
 	  クラスが存在せず "could not load class" になる。
 	  解決には wry/tao 側の対応が必要。
 	-->
+	<!-- 楽譜をカメラで撮って読み取る (#2)。無いとカメラを使おうとした時点で落とされる -->
+	<key>NSCameraUsageDescription</key>
+	<string>楽譜を撮影して読み取るためにカメラを使います。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

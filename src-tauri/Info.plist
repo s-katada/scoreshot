@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  macOS のアプリの Info.plist に足すもの。tauri のバンドラが生成する
+	  Info.plist に混ぜ込まれ、cargo tauri dev のときは実行ファイルに埋め込まれる。
+	-->
+	<!-- 楽譜をカメラで撮って読み取る (#2)。無いとカメラを使おうとした時点で落とされる -->
+	<key>NSCameraUsageDescription</key>
+	<string>楽譜を撮影して読み取るためにカメラを使います。</string>
+</dict>
+</plist>
