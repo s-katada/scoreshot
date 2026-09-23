@@ -21,5 +21,5 @@
 - **Worker は ES モジュールで出す**(`vite.config.ts` の `worker.format`)。onnxruntime-web は自分のファイルの URL からスレッドの Worker を作るので、別のチャンクに分かれている必要がある
 - カメラの利用目的の文は `src-tauri/Info.plist`(macOS)と `src-tauri/Info.ios.plist`(iOS)の `NSCameraUsageDescription`。WebView 側の許可は wry が自動で与える
 - `pnpm check` は見た目では確認できない部分の検証(和音が同時刻か、付点の長さ、MusicXML の `<backup>` が上段の長さと一致するか、保存形式や MusicXML / MIDI の往復、OMR の後処理など)。OMR はモデルを使わず、モデルの出力を段 1 つぶん保存したもの(`scripts/fixtures/omr/`)で確かめる。テストフレームワークは入れていない
-- 作業の現在地・着手順・各機能の仕様は issue にある。まず #9(ピン留め)を読む
+- 作業の現在地・次にやること・壊しやすい所は `docs/roadmap.md`(もとは issue #9)、各機能の仕様は issue にある。まず `docs/roadmap.md` を読む
 - コミットは1関心=1コミットの細粒度(Conventional Commits + 日本語メッセージ)。マイルストーンをまとめて1コミットにしない
