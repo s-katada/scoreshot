@@ -9,12 +9,19 @@ import { ScoreView } from "./components/ScoreView";
 import { primaryButtonClass, secondaryButtonClass } from "./components/styles";
 import { loadInstrument, play, playNote, stop } from "./audio/player";
 import { useScoreEditor } from "./editor/useScoreEditor";
+import { scoreToMidi } from "./model/midi";
 import { scoreToMusicXml } from "./model/musicxml";
 import { createEmptyScore, type NewScoreOptions } from "./model/newScore";
 import { sampleScore } from "./model/sample";
 import type { Score } from "./model/score";
 import { useHistory } from "./state/useHistory";
-import { MUSICXML_FILE, safeFileName, saveFileAs } from "./storage/userFiles";
+import {
+  MIDI_FILE,
+  MUSICXML_FILE,
+  safeFileName,
+  saveFileAs,
+  type FileType,
+} from "./storage/userFiles";
 import { describeError } from "./util/errors";
 import {
   loadSavedScore,
@@ -126,23 +133,33 @@ export default function App() {
     });
   }, [playing, score]);
 
-  const exportMusicXml = useCallback(async () => {
-    try {
-      const saved = await saveFileAs(
-        `${safeFileName(score.title)}.musicxml`,
-        scoreToMusicXml(score),
-        MUSICXML_FILE,
-      );
-      if (saved) {
-        setNotice({ tone: "info", text: "MusicXML に書き出しました。" });
+  /** 楽譜を形式 label のファイルに書き出す */
+  const exportScore = useCallback(
+    async (label: string, extension: string, data: () => Uint8Array | string, type: FileType) => {
+      try {
+        const saved = await saveFileAs(`${safeFileName(score.title)}.${extension}`, data(), type);
+        if (saved) {
+          setNotice({ tone: "info", text: `${label} に書き出しました。` });
+        }
+      } catch (error) {
+        setNotice({
+          tone: "error",
+          text: `${label} に書き出せませんでした。\n${describeError(error)}`,
+        });
       }
-    } catch (error) {
-      setNotice({
-        tone: "error",
-        text: `MusicXML に書き出せませんでした。\n${describeError(error)}`,
-      });
-    }
-  }, [score]);
+    },
+    [score.title],
+  );
+
+  const exportMusicXml = useCallback(
+    () => exportScore("MusicXML", "musicxml", () => scoreToMusicXml(score), MUSICXML_FILE),
+    [exportScore, score],
+  );
+
+  const exportMidi = useCallback(
+    () => exportScore("MIDI", "mid", () => scoreToMidi(score), MIDI_FILE),
+    [exportScore, score],
+  );
 
   /** 楽譜を丸ごと差し替える。履歴に積むので元に戻せる */
   const replaceScore = useCallback(
@@ -240,6 +257,7 @@ export default function App() {
 
         <FileMenu
           onExportMusicXml={() => void exportMusicXml()}
+          onExportMidi={() => void exportMidi()}
           disabled={loaded === null}
         />
       </section>

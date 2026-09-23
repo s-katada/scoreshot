@@ -6,10 +6,11 @@ import { secondaryButtonClass } from "./styles";
 
 interface FileMenuProps {
   onExportMusicXml: () => void;
+  onExportMidi: () => void;
   disabled?: boolean;
 }
 
-export function FileMenu({ onExportMusicXml, disabled }: FileMenuProps) {
+export function FileMenu({ onExportMusicXml, onExportMidi, disabled }: FileMenuProps) {
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="ファイル">
       <button
@@ -20,6 +21,15 @@ export function FileMenu({ onExportMusicXml, disabled }: FileMenuProps) {
         title="MuseScore などで開ける MusicXML に書き出す"
       >
         MusicXML に書き出す
+      </button>
+      <button
+        type="button"
+        onClick={onExportMidi}
+        disabled={disabled}
+        className={secondaryButtonClass}
+        title="DAW などで使える MIDI に書き出す"
+      >
+        MIDI に書き出す
       </button>
     </div>
   );
