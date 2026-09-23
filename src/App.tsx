@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { Banner } from "./components/Banner";
 import { ConfirmButton } from "./components/ConfirmButton";
 import { EditorToolbar } from "./components/EditorToolbar";
+import { NewScoreForm } from "./components/NewScoreForm";
 import { ScoreSettings } from "./components/ScoreSettings";
 import { ScoreView } from "./components/ScoreView";
-import { primaryButtonClass } from "./components/styles";
+import { primaryButtonClass, secondaryButtonClass } from "./components/styles";
 import { loadInstrument, play, playNote, stop } from "./audio/player";
 import { useScoreEditor } from "./editor/useScoreEditor";
+import { createEmptyScore, type NewScoreOptions } from "./model/newScore";
 import { sampleScore } from "./model/sample";
 import type { Score } from "./model/score";
 import { useHistory } from "./state/useHistory";
@@ -39,6 +41,7 @@ export default function App() {
   // 起動時の復元結果。null の間は読み込み中
   const [loaded, setLoaded] = useState<LoadedScore | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   // スライダーを動かしている間の値と、楽譜に反映する値を分けている。
   // テンポは MusicXML のメトロノーム記号に載るため、確定させずに反映すると
   // つまみを動かすたびに OSMD の再レイアウトが走ってしまう。
@@ -117,12 +120,27 @@ export default function App() {
     });
   }, [playing, score]);
 
-  const resetToSample = useCallback(() => {
-    stop();
-    setPlaying(false);
-    setPosition(null);
-    history.update(() => sampleScore);
-  }, [history]);
+  /** 楽譜を丸ごと差し替える。履歴に積むので元に戻せる */
+  const replaceScore = useCallback(
+    (next: Score) => {
+      stop();
+      setPlaying(false);
+      setPosition(null);
+      editor.select(null);
+      history.update(() => next);
+    },
+    [history, editor],
+  );
+
+  const resetToSample = useCallback(() => replaceScore(sampleScore), [replaceScore]);
+
+  const createScore = useCallback(
+    (options: NewScoreOptions) => {
+      replaceScore(createEmptyScore(options));
+      setCreating(false);
+    },
+    [replaceScore],
+  );
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-4xl flex-col gap-6 px-4 py-8">
@@ -173,6 +191,16 @@ export default function App() {
           </span>
         </label>
 
+        <button
+          type="button"
+          onClick={() => setCreating((c) => !c)}
+          disabled={loaded === null}
+          aria-expanded={creating}
+          className={secondaryButtonClass}
+        >
+          新規作成
+        </button>
+
         <ConfirmButton
           onConfirm={resetToSample}
           confirmLabel="サンプルに戻す"
@@ -181,6 +209,15 @@ export default function App() {
           サンプルに戻す
         </ConfirmButton>
       </section>
+
+      {creating && (
+        <NewScoreForm
+          onCreate={createScore}
+          onCancel={() => setCreating(false)}
+          submitLabel="作成して置き換える"
+          notice="今の楽譜は置き換わります (元に戻すで戻せます)。"
+        />
+      )}
 
       {loaded === null ? (
         <p className="text-sm opacity-60">楽譜を読み込み中…</p>
