@@ -5,6 +5,7 @@
  * 外部への書き出しの両方の入口になる。
  */
 
+import { measureAccidentals, type AccidentalMark } from "./accidentals";
 import {
   DIVISIONS,
   noteDuration,
@@ -27,7 +28,11 @@ function indent(level: number): string {
   return "  ".repeat(level);
 }
 
-function noteToXml(note: Note, level: number): string {
+function noteToXml(
+  note: Note,
+  level: number,
+  accidental: AccidentalMark | undefined,
+): string {
   const pad = indent(level);
   const inner = indent(level + 1);
   const lines: string[] = [`${pad}<note>`];
@@ -58,11 +63,10 @@ function noteToXml(note: Note, level: number): string {
   for (let i = 0; i < (note.dots ?? 0); i++) {
     lines.push(`${inner}<dot/>`);
   }
-  if (note.pitch?.alter) {
-    // 調号を考慮した臨時記号の省略はまだ行わない。
-    // ハ長調のサンプルでは alter がそのまま臨時記号になるため問題ない。
-    const name = note.pitch.alter === 1 ? "sharp" : "flat";
-    lines.push(`${inner}<accidental>${name}</accidental>`);
+  // 鳴る高さは <alter> が決め、<accidental> は楽譜に書く記号だけを表す。
+  // 調号と小節内の直前の記号から導いたものを書く (accidentals.ts)
+  if (accidental !== undefined) {
+    lines.push(`${inner}<accidental>${accidental}</accidental>`);
   }
   lines.push(`${inner}<staff>${note.staff}</staff>`);
   lines.push(`${pad}</note>`);
@@ -73,10 +77,11 @@ function staffNotesToXml(
   measure: Measure,
   staff: StaffNumber,
   level: number,
+  accidentals: Map<string, AccidentalMark>,
 ): string[] {
   return measure.notes
     .filter((n) => n.staff === staff)
-    .map((n) => noteToXml(n, level));
+    .map((n) => noteToXml(n, level, accidentals.get(n.id)));
 }
 
 function measureToXml(
@@ -124,9 +129,11 @@ function measureToXml(
     lines.push(`${inner}</direction>`);
   }
 
+  const accidentals = measureAccidentals(measure, score.key.fifths);
+
   // 上段 -> backup -> 下段。MusicXML では小節内の時間が一方向にしか
   // 進まないので、段を移るには backup で巻き戻す必要がある。
-  lines.push(...staffNotesToXml(measure, 1, level + 1));
+  lines.push(...staffNotesToXml(measure, 1, level + 1, accidentals));
 
   const upperLength = staffQuarterLength(measure, 1);
   const hasLower = measure.notes.some((n) => n.staff === 2);
@@ -137,7 +144,7 @@ function measureToXml(
     lines.push(`${inner}</backup>`);
   }
 
-  lines.push(...staffNotesToXml(measure, 2, level + 1));
+  lines.push(...staffNotesToXml(measure, 2, level + 1, accidentals));
   lines.push(`${pad}</measure>`);
   return lines.join("\n");
 }
