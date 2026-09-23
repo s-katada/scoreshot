@@ -10,6 +10,9 @@
 /** 幹音名 */
 export type Step = "C" | "D" | "E" | "F" | "G" | "A" | "B";
 
+/** 幹音名を低い順に並べたもの */
+export const STEPS: readonly Step[] = ["C", "D", "E", "F", "G", "A", "B"];
+
 /** 変化記号。-1 = ♭, 0 = なし, 1 = ♯ */
 export type Alter = -1 | 0 | 1;
 
@@ -28,6 +31,16 @@ export type NoteType =
   | "eighth"
   | "16th"
   | "32nd";
+
+/** 音価を長い順に並べたもの */
+export const NOTE_TYPES: readonly NoteType[] = [
+  "whole",
+  "half",
+  "quarter",
+  "eighth",
+  "16th",
+  "32nd",
+];
 
 /** 大譜表の段。1 = ト音記号 (右手), 2 = ヘ音記号 (左手) */
 export type StaffNumber = 1 | 2;
@@ -66,7 +79,7 @@ export interface Score {
 export const DIVISIONS = 480;
 
 /** 音価を四分音符いくつぶんかで表した値 */
-const QUARTER_LENGTH: Record<NoteType, number> = {
+export const QUARTER_LENGTH: Record<NoteType, number> = {
   whole: 4,
   half: 2,
   quarter: 1,
@@ -87,6 +100,11 @@ export function noteQuarterLength(note: Note): number {
     add /= 2;
   }
   return base * factor;
+}
+
+/** 1 小節の長さを四分音符単位で返す (6/8 なら 3) */
+export function measureQuarterLength(time: Score["time"]): number {
+  return (time.beats * 4) / time.beatType;
 }
 
 /** 音符の長さを MusicXML の duration (divisions 単位) で返す */
