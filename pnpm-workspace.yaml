@@ -1,8 +1,12 @@
 # gl は opensheetmusicdisplay が Node 側で楽譜を画像化するときに使う
 # headless WebGL。ブラウザ/WebView では使わないのでビルドしない。
+# protobufjs (onnxruntime-web が使う) の postinstall も、ブラウザで
+# 動かすだけなら要らない。
 ignoredBuiltDependencies:
   - gl
+  - protobufjs
 # pnpm 12 は許可も拒否もされていないビルドをエラーにするため、
 # 拒否を明示しておく (ignoredBuiltDependencies は pnpm 10 向けに残す)
 allowBuilds:
   gl: false
+  protobufjs: false
