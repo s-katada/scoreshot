@@ -1,5 +1,13 @@
+#[cfg(target_os = "ios")]
+mod audio_session;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  // 消音スイッチ (マナーモード) が入っていても音が鳴るようにする (#8)。
+  // macOS には無い仕組みなので iOS / iPadOS だけ
+  #[cfg(target_os = "ios")]
+  audio_session::use_playback_category();
+
   tauri::Builder::default()
     // 楽譜をアプリデータディレクトリに保存する (#4)
     .plugin(tauri_plugin_fs::init())

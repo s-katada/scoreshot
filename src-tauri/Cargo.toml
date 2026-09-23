@@ -22,3 +22,10 @@ tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-fs = "2.5.2"
 tauri-plugin-dialog = "2.7.3"
+
+# iOS のオーディオセッションを設定する (src/audio_session.rs)。
+# どれも tao / wry が既に使っている版に揃えている
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSError"] }
+libc = "0.2"
