@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if [ \"$CLAUDE_CODE_REMOTE\" = \"true\" ]; then git -C \"$CLAUDE_PROJECT_DIR\" config user.name s-katada && git -C \"$CLAUDE_PROJECT_DIR\" config user.email shunya.saitama@gmail.com; fi"
+            "command": "if [ \"$CLAUDE_CODE_REMOTE\" = \"true\" ]; then git -C \"$CLAUDE_PROJECT_DIR\" config author.name s-katada && git -C \"$CLAUDE_PROJECT_DIR\" config author.email shunya.saitama@gmail.com; fi"
           }
         ]
       }

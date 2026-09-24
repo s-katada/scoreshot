@@ -22,5 +22,5 @@
 - カメラの利用目的の文は `src-tauri/Info.plist`(macOS)と `src-tauri/Info.ios.plist`(iOS)の `NSCameraUsageDescription`。WebView 側の許可は wry が自動で与える
 - `pnpm check` は見た目では確認できない部分の検証(和音が同時刻か、付点の長さ、MusicXML の `<backup>` が上段の長さと一致するか、保存形式や MusicXML / MIDI の往復、OMR の後処理など)。OMR はモデルを使わず、モデルの出力を段 1 つぶん保存したもの(`scripts/fixtures/omr/`)で確かめる。テストフレームワークは入れていない
 - 作業の現在地・次にやること・壊しやすい所は `docs/roadmap.md`(もとは issue #9)、各機能の仕様は issue にある。まず `docs/roadmap.md` を読む
-- Claude Code on the web で作業するときは、`.claude/settings.json` の SessionStart フックでコミットの作者を s-katada にしている(GitHub の草に数えるため)。Claude はコミットメッセージの `Co-Authored-By` に付く
+- Claude Code on the web で作業するときは、`.claude/settings.json` の SessionStart フックでコミットの作者(author)を s-katada にしている(GitHub の草は作者で数えられるため)。コミッターは Claude のまま(web の環境はコミッターが Claude のコミットに署名し、Verified になる)。Claude はコミットメッセージの `Co-Authored-By` にも付く
 - コミットは1関心=1コミットの細粒度(Conventional Commits + 日本語メッセージ)。マイルストーンをまとめて1コミットにしない
