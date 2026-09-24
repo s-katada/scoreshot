@@ -228,12 +228,19 @@ function fillStaff(
   return events;
 }
 
-/** まとまりの並びを小節の notes に戻す。和音の構成音には chord を立てる */
+/**
+ * まとまりの並びを小節の notes に戻す。和音の構成音には chord を立てる。
+ * タイの印は音符に残す (休符には付けない)
+ */
 function flatten(events: StaffEvent[]): Note[] {
   return events.flatMap((event) =>
-    event.notes.map((note, i) =>
-      makeNote(note.id, note.pitch, noteDurationOf(note), note.staff, i > 0),
-    ),
+    event.notes.map((note, i) => {
+      const flat = makeNote(note.id, note.pitch, noteDurationOf(note), note.staff, i > 0);
+      if (note.tie && note.pitch !== null) {
+        flat.tie = true;
+      }
+      return flat;
+    }),
   );
 }
 
@@ -496,11 +503,7 @@ export function setEventDuration(
     // 休符のまとまりとして置いたので、隣の休符とはまとめ直さない
     return { score: next, noteIds: [noteId] };
   }
-  // 長さを変えてもタイの印は残す
-  const notes = event.notes.map((n, i) => ({
-    ...makeNote(n.id, n.pitch, duration, staff, i > 0),
-    ...(n.tie ? { tie: true } : {}),
-  }));
+  const notes = event.notes.map((n, i) => ({ ...makeNote(n.id, n.pitch, duration, staff, i > 0), tie: n.tie }));
   return {
     score: overwrite(score, position, length, notes),
     noteIds: [noteId],
