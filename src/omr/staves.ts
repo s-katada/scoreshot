@@ -176,6 +176,46 @@ function extent(mask: Uint8Array, width: number, staff: Staff, direction: -1 | 1
 }
 
 /**
+ * 前後の標本から外れた標本を除く。太い連桁などが五線の 1 本と取り違え
+ * られると、その帯だけ五線が上下にずれ、そこから先の符頭の高さや小節線の
+ * 追い方が狂う。前後の標本をつないだ線からの高さのずれか、線の間隔の
+ * 違いが大きいものを、なくなるまで 1 つずつ除く。
+ */
+function dropOutliers(samples: StaffSample[], spacing: number): StaffSample[] {
+  const kept = [...samples];
+  const gap = (s: StaffSample) => (s.lines[4] - s.lines[0]) / 4;
+  for (;;) {
+    let worst = -1;
+    let worstScore = 0;
+    for (let i = 0; i < kept.length; i++) {
+      // 両隣 (端では同じ側の 2 つ) から、この x での高さと間隔を見込む
+      const [a, b] =
+        i === 0 ? [kept[1], kept[2]] : i === kept.length - 1 ? [kept[i - 2], kept[i - 1]] : [kept[i - 1], kept[i + 1]];
+      if (a === undefined || b === undefined || a.x === b.x) {
+        continue;
+      }
+      const t = (kept[i].x - a.x) / (b.x - a.x);
+      const top = a.lines[0] + (b.lines[0] - a.lines[0]) * t;
+      const expectedGap = gap(a) + (gap(b) - gap(a)) * t;
+      // 端は片側からの見込みで、紙のたわみで本当に曲がっていることもあるので甘くする
+      const end = i === 0 || i === kept.length - 1;
+      const score = Math.max(
+        Math.abs(kept[i].lines[0] - top) / (spacing * (end ? 1 : 0.4)),
+        Math.abs(gap(kept[i]) - expectedGap) / (expectedGap * 0.12),
+      );
+      if (score > 1 && score > worstScore) {
+        worst = i;
+        worstScore = score;
+      }
+    }
+    if (worst < 0) {
+      return kept;
+    }
+    kept.splice(worst, 1);
+  }
+}
+
+/**
  * 五線を見つける。spacing は線の間隔の見込み (縮尺合わせをしていれば
  * 目標の値)。上から順に返す。
  */
@@ -216,6 +256,7 @@ export function findStaves(staffLabels: LabelImage, spacing: number): Staff[] {
 
   const staves: Staff[] = [];
   for (const chain of chains) {
+    chain.samples = dropOutliers(chain.samples, spacing);
     if (chain.samples.length < 3) {
       continue;
     }
