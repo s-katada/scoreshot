@@ -1,6 +1,6 @@
 /**
  * ユーザーが選んだ場所のファイルを読み書きする。MusicXML / MIDI の
- * 読み込み・書き出し (#5) と、楽譜の画像の読み込み (#2) に使う。
+ * 書き出し (#5) と、楽譜の画像の読み込み (#2) に使う。
  *
  * アプリとして動いているときは Tauri のダイアログで保存先や読み込む
  * ファイルを選ばせる。選ばれたファイルは fs プラグインのスコープに
@@ -24,7 +24,7 @@ export interface FileType {
 
 export const MUSICXML_FILE: FileType = {
   name: "MusicXML",
-  extensions: ["musicxml", "xml", "mxl"],
+  extensions: ["musicxml"],
   mime: "application/vnd.recordare.musicxml+xml",
 };
 
