@@ -310,7 +310,9 @@ export function groupSystems(staves: Staff[]): System[] {
     systems.push({
       staves: members,
       left: Math.min(...members.map((s) => s.left)),
-      right: Math.max(...members.map((s) => s.right)),
+      // 右端は短い方に揃える。見開きの写真では、隣のページの五線まで
+      // 続いて見えることがある
+      right: Math.min(...members.map((s) => s.right)),
     });
     i += members.length;
   }
