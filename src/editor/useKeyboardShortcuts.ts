@@ -100,6 +100,8 @@ export function useKeyboardShortcuts({ editor, togglePlayback, enabled }: Option
         run(e.toggleDot);
       } else if (key === "0") {
         run(e.typeRest);
+      } else if (upper === "T") {
+        run(e.toggleSelectedTie);
       } else if (key === "ArrowUp") {
         run(() => e.moveSelection(1));
       } else if (key === "ArrowDown") {

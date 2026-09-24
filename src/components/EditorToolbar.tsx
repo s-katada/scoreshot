@@ -22,6 +22,7 @@ const KEYBOARD_HELP: Array<[string, string]> = [
   ["3〜7", "音価 (16 分・8 分・4 分・2 分・全音符)"],
   [".", "付点"],
   ["0", "休符を置く"],
+  ["T", "選んでいる音を次の同じ高さの音とタイでつなぐ (もう一度で外す)"],
   ["↑ / ↓", "選んでいる音を 1 音上下 (⌘ と一緒でオクターブ)"],
   ["← / →", "前後の音を選ぶ"],
   ["Delete", "選んでいる音を消す"],
@@ -154,6 +155,14 @@ export function EditorToolbar({ editor }: { editor: ScoreEditor }) {
           </ToolButton>
           <ToolButton onClick={() => editor.setAccidental(0)} disabled={!hasPitch} active={alter === 0} title="♮ にする (もう一度押すと調号どおりに戻す)">
             ♮
+          </ToolButton>
+          <ToolButton
+            onClick={editor.toggleSelectedTie}
+            disabled={!hasPitch}
+            active={editor.selectedTied}
+            title="次に鳴る同じ高さの音とタイでつなぐ (もう一度押すと外す)"
+          >
+            タイ
           </ToolButton>
           <ToolButton onClick={editor.toggleSelectedRest} disabled={selected === null} title="休符と音符を入れ替える">
             休符⇄音符

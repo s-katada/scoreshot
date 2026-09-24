@@ -29,6 +29,7 @@ import {
   snapOnset,
   staffEvents,
   toggleRest,
+  toggleTie,
   type EditResult,
   type StaffPosition,
 } from "../model/edit";
@@ -50,6 +51,7 @@ import {
   type StaffNumber,
   type Step,
 } from "../model/score";
+import { tieTarget } from "../model/ties";
 import type { History } from "../state/useHistory";
 
 export type EditMode = "input" | "select";
@@ -477,6 +479,20 @@ export function useScoreEditor({ history, onSound }: Options) {
     apply((s) => toggleRest(s, selected.note.id, pitch));
   }, [selected, score.key.fifths, apply]);
 
+  /** 選んでいる音と、次に鳴る同じ高さの音をタイでつなぐ。つながっていれば外す */
+  const toggleSelectedTie = useCallback(() => {
+    if (selected === null || selected.note.pitch === null) {
+      return;
+    }
+    apply((s) => toggleTie(s, selected.note.id));
+  }, [selected, apply]);
+
+  /** 選んでいる音が次の音とタイでつながっているか */
+  const selectedTied = useMemo(
+    () => selected !== null && selected.note.tie === true && tieTarget(score, selected.note.id) !== null,
+    [selected, score],
+  );
+
   const deleteSelected = useCallback(() => {
     if (selected === null) {
       return;
@@ -544,6 +560,8 @@ export function useScoreEditor({ history, onSound }: Options) {
     moveSelection,
     setAccidental,
     toggleSelectedRest,
+    toggleSelectedTie,
+    selectedTied,
     deleteSelected,
     addMeasure,
     deleteMeasure,
