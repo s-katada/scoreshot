@@ -16,7 +16,7 @@
 - モデルには実際の音高だけを持つ。♯♭♮ をどこに表示するかは MusicXML に書き出すときに、調号と小節の中で先に付いたものから決める(`src/model/accidentals.ts`)
 - 楽譜は AppData の `scores/<id>.json` と一覧の `library.json` に保存する(ブラウザで開いたときは localStorage の `scoreshot:` の下)。書き込みは `.tmp` に書いてから rename。**開いている楽譜を切り替える前に自動保存を `flush()` する**。しないと自動保存の待ち時間(300ms)の間にした編集が失われる
 - OMR(`src/omr/`)は、画像 → 紙の地を白に揃える → 線の間隔を 13.5px に揃える → oemer の 2 つの画像分割モデル → 後処理(`recognize.ts`、自前)→ `Score`。モデルは onnxruntime-web の WASM で、画面を塞がないよう Web Worker(`omr.worker.ts`)で動かす。後処理の詳しい流れと認識率の測り方は `scripts/omr/README.md`
-- **OMR のモデル(104MB)は git に入れていない。** `pnpm omr:models` で `public/models/` に置く(`pnpm build` が最初に走らせる)。アプリの実行ファイルに埋め込まれ、約 103MB 増える
+- **OMR のモデル(104MB)は git に入れていない。** `pnpm omr:models` で `public/models/` に置く(`pnpm dev` / `pnpm build` が最初に走らせる)。アプリの実行ファイルに埋め込まれ、約 103MB 増える
 - **COOP/COEP のヘッダを外さない**(`vite.config.ts` と `src-tauri/tauri.conf.json`)。onnxruntime-web が複数スレッドで動くのに cross-origin isolation が要り、無いと 1 スレッドになって読み取りが 4 倍ほど遅くなる。外のリソースを読むものを足すときは COEP で止められないか確かめる
 - **Worker は ES モジュールで出す**(`vite.config.ts` の `worker.format`)。onnxruntime-web は自分のファイルの URL からスレッドの Worker を作るので、別のチャンクに分かれている必要がある
 - カメラの利用目的の文は `src-tauri/Info.plist`(macOS)と `src-tauri/Info.ios.plist`(iOS)の `NSCameraUsageDescription`。WebView 側の許可は wry が自動で与える

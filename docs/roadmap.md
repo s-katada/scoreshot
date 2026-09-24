@@ -81,7 +81,7 @@ pnpm check                         # 見た目では確かめにくい所の検�
 cargo tauri build --debug --no-bundle   # macOS アプリのビルド
 ```
 
-OMR のモデルは git に入れていない(`pnpm omr:models` で `public/models/` に置く。`pnpm build` が最初に走らせる)。認識率の測り方と開発用の道具は `scripts/omr/README.md`。
+OMR のモデルは git に入れていない(`pnpm omr:models` で `public/models/` に置く。`pnpm dev` / `pnpm build` が最初に走らせる)。認識率の測り方と開発用の道具は `scripts/omr/README.md`。
 
 iOS ビルドは `cargo tauri ios build --target aarch64-sim --debug`。**必ず `nix develop` 経由で叩くこと**(直接叩くと Apple のツールチェーンが nix に覆われる)。
 
