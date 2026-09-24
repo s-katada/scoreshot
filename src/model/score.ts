@@ -55,6 +55,11 @@ export interface Note {
   staff: StaffNumber;
   /** true なら直前の音と同時に鳴る (和音の構成音) */
   chord?: boolean;
+  /**
+   * true なら、同じ段で次に鳴る同じ高さの音へタイでつなぐ (小節線を
+   * またいでもよい)。つなぐ相手が無ければ無視する (ties.ts)
+   */
+  tie?: boolean;
 }
 
 export interface Measure {
