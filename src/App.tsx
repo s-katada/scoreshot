@@ -16,8 +16,6 @@ import { useScoreEditor } from "./editor/useScoreEditor";
 import { setTitle } from "./model/edit";
 import { scoreToMidi } from "./model/midi";
 import { scoreToMusicXml } from "./model/musicxml";
-import { readMusicXmlFile } from "./model/musicxmlFile";
-import { MusicXmlImportError } from "./model/musicxmlImport";
 import type { Recognition } from "./omr/recognize";
 import { sampleScore } from "./model/sample";
 import { measureQuarterLength, type Score } from "./model/score";
@@ -37,7 +35,6 @@ import { useAutoSave, type SaveStatus } from "./storage/persist";
 import {
   MIDI_FILE,
   MUSICXML_FILE,
-  openFile,
   safeFileName,
   saveFileAs,
   type FileType,
@@ -301,34 +298,6 @@ export default function App() {
 
   const resetToSample = useCallback(() => replaceScore(sampleScore), [replaceScore]);
 
-  const importMusicXml = useCallback(async () => {
-    let picked;
-    try {
-      picked = await openFile([MUSICXML_FILE]);
-    } catch (error) {
-      setNotice({ tone: "error", text: `ファイルを開けませんでした。\n${describeError(error)}` });
-      return;
-    }
-    if (picked === null) {
-      return;
-    }
-    try {
-      const { score: imported, warnings } = readMusicXmlFile(picked.name, picked.bytes);
-      await addAndOpen(imported);
-      const lines = [`「${imported.title}」を読み込み、新しい楽譜として楽譜一覧に足しました。`];
-      if (warnings.length > 0) {
-        lines.push("", "読み込めなかったもの・変えて読み込んだもの:", ...warnings.map((w) => `・${w}`));
-      }
-      setNotice({ tone: "info", text: lines.join("\n") });
-    } catch (error) {
-      const reason =
-        error instanceof MusicXmlImportError
-          ? error.message
-          : `思わぬエラーです: ${describeError(error)}`;
-      setNotice({ tone: "error", text: `「${picked.name}」を読み込めませんでした。\n${reason}` });
-    }
-  }, [addAndOpen]);
-
   /** 画像から読み取った楽譜を、新しい楽譜として足して開く (#2) */
   const addRecognized = useCallback(
     async (recognition: Recognition, name: string) => {
@@ -417,7 +386,6 @@ export default function App() {
           サンプルに戻す
         </ConfirmButton>
         <FileMenu
-          onImportMusicXml={() => void importMusicXml()}
           onExportMusicXml={() => void exportMusicXml()}
           onExportMidi={() => void exportMidi()}
           disabled={!ready}
