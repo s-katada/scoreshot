@@ -177,7 +177,9 @@ export function recognize(input: Page): Recognition {
   }
 
   // 拍子: 小節に入っている長さのうち、いちばん多いもの。同じ位置で鳴り
-  // 始めるもの (和音) は、組み立てるときと同じく 1 つに数える
+  // 始めるもの (和音) は、組み立てるときと同じく 1 つに数える。伸ばした音の
+  // 下で別の旋律が動く所 (2 声) は 1 本に並べてしまい長く出るので、上下の
+  // 段のうち短い方 (中身のある段) をその小節の長さとする
   const staffLength = (items: Item[]) => {
     let length = 0;
     let lastX = -Infinity;
@@ -193,7 +195,10 @@ export function recognize(input: Page): Recognition {
     return length;
   };
   const lengths = raw
-    .map((m) => Math.max(staffLength(m.staves[1]), staffLength(m.staves[2])))
+    .map((m) => {
+      const filled = [staffLength(m.staves[1]), staffLength(m.staves[2])].filter((l) => l > 0);
+      return filled.length === 0 ? 0 : Math.min(...filled);
+    })
     .filter((length) => length > 0);
   const measureLength = modeOf(lengths) ?? 4;
   const time = timeFromLength(measureLength);
