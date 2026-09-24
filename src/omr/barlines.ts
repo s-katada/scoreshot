@@ -7,7 +7,8 @@
  * 紛れない。
  *
  * 写真は傾いているので、真下ではなく五線に直交する向きにたどる (1° 傾くと
- * 大譜表の上から下までで線の太さより大きくずれる)。台形の歪みや紙の
+ * 大譜表の上から下までで線の太さより大きくずれる)。斜めから撮ると縦の
+ * 線は遠近でさらに傾くので、その向きから少しずつ振っても確かめる。紙の
  * たわみで少し曲がるぶんは、左右 1 画素まで見込む。
  */
 
@@ -40,6 +41,9 @@ function coverage(page: Page, x0: number, y0: number, slope: number, top: number
   return total === 0 ? 0 : covered / total;
 }
 
+/** 五線の直交方向からの、小節線の傾きの候補 (dx/dy、±3.4° まで) */
+const LEANS = [0, -0.01, 0.01, -0.02, 0.02, -0.03, 0.03, -0.04, 0.04, -0.05, 0.05, -0.06, 0.06];
+
 /** 小節の左右の x。段の頭 (音部記号など) を含む最初の小節から順に */
 export function measureBounds(page: Page, system: System): Array<[number, number]> {
   const d = page.spacing;
@@ -54,7 +58,9 @@ export function measureBounds(page: Page, system: System): Array<[number, number
     // 小節線は五線から少しはみ出さない範囲で測る (上下端の揺れを見込む)
     const top = y0 + 1;
     const bottom = lineY(last, 4, x - (lineY(last, 4, x) - y0) * slope) - 1;
-    if (coverage(page, x, y0, slope, top, bottom) >= threshold) {
+    // 斜めから撮った写真では、縦の線が遠近で五線の直交方向から少し傾く
+    // (大譜表の上から下までで数画素ずれる)。傾きを少しずつ振って確かめる
+    if (LEANS.some((lean) => coverage(page, x, y0, slope + lean, top, bottom) >= threshold)) {
       columns.push(x);
     }
   }
