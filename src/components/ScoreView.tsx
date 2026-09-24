@@ -545,6 +545,18 @@ export function ScoreView({
     }
     const token = loadTokenRef.current + 1;
     loadTokenRef.current = token;
+    // 読み直す間、OSMD は描画先を一度空にする。そのままだとページが縮んで
+    // スクロール位置が先頭に詰められ、編集するたびに画面がいちばん上へ
+    // 戻ってしまう。描き終わるまで今の高さを保つ
+    const container = containerRef.current;
+    if (container !== null) {
+      container.style.minHeight = `${container.offsetHeight}px`;
+    }
+    const release = () => {
+      if (container !== null && loadTokenRef.current === token) {
+        container.style.minHeight = "";
+      }
+    };
 
     void (async () => {
       try {
@@ -555,6 +567,7 @@ export function ScoreView({
         osmd.render();
       } catch {
         // 読み込み中に破棄された場合など。新しい世代が描き直す
+        release();
         return;
       }
       if (loadTokenRef.current !== token) {
@@ -562,6 +575,7 @@ export function ScoreView({
       }
       renderedScoreRef.current = score;
       afterRender(osmd);
+      release();
     })();
     // score も見る。休符の id だけが変わった編集では MusicXML が同じままでも
     // 音符との対応づけを作り直す必要がある
