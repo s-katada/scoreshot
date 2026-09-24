@@ -176,17 +176,24 @@ export function recognize(input: Page): Recognition {
     }
   }
 
-  // 拍子: 小節に入っている長さのうち、いちばん多いもの
+  // 拍子: 小節に入っている長さのうち、いちばん多いもの。同じ位置で鳴り
+  // 始めるもの (和音) は、組み立てるときと同じく 1 つに数える
+  const staffLength = (items: Item[]) => {
+    let length = 0;
+    let lastX = -Infinity;
+    for (const item of [...items].sort((a, b) => a.x - b.x)) {
+      if (item.kind === "rest" && item.wholeShape) {
+        continue;
+      }
+      if (item.x - lastX >= d * 0.6) {
+        length += itemLength(item);
+      }
+      lastX = item.x;
+    }
+    return length;
+  };
   const lengths = raw
-    .map((m) =>
-      Math.max(
-        ...([1, 2] as StaffNumber[]).map((staff) =>
-          m.staves[staff]
-            .filter((item) => !(item.kind === "rest" && item.wholeShape))
-            .reduce((sum, item) => sum + itemLength(item), 0),
-        ),
-      ),
-    )
+    .map((m) => Math.max(staffLength(m.staves[1]), staffLength(m.staves[2])))
     .filter((length) => length > 0);
   const measureLength = modeOf(lengths) ?? 4;
   const time = timeFromLength(measureLength);
