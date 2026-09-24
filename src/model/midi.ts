@@ -10,6 +10,7 @@
 
 import { isRestEvent, staffEvents } from "./edit";
 import { midiNumber } from "./pitch";
+import { tiePairs } from "./ties";
 import {
   DIVISIONS,
   measureQuarterLength,
@@ -93,6 +94,10 @@ function staffTrack(score: Score, staff: StaffNumber): number[] {
     { tick: 0, order: 0, bytes: [0xc0 | channel, PIANO_PROGRAM] },
   ];
 
+  // タイでつながった音は弾き直さない: 始まりの音は消音せず、つながった先は発音しない
+  const pairs = tiePairs(score);
+  const continued = new Set([...pairs.values()].map((n) => n.id));
+
   score.measures.forEach((measure, index) => {
     const start = index * measureTicks;
     for (const event of staffEvents(measure, staff)) {
@@ -103,8 +108,12 @@ function staffTrack(score: Score, staff: StaffNumber): number[] {
       const off = Math.round(start + (event.onset + event.length) * MIDI_PPQ);
       for (const note of event.notes) {
         const key = midiNumber(note.pitch as Pitch);
-        events.push({ tick: on, order: 2, bytes: [0x90 | channel, key, VELOCITY] });
-        events.push({ tick: off, order: 1, bytes: [0x80 | channel, key, 0] });
+        if (!continued.has(note.id)) {
+          events.push({ tick: on, order: 2, bytes: [0x90 | channel, key, VELOCITY] });
+        }
+        if (!pairs.has(note.id)) {
+          events.push({ tick: off, order: 1, bytes: [0x80 | channel, key, 0] });
+        }
       }
     }
   });
