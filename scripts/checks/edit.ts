@@ -20,7 +20,7 @@ import { pitchToName, type Score, type StaffNumber } from "../../src/model/score
 import { scoreToMusicXml } from "../../src/model/musicxml";
 import { scoreToTimedNotes } from "../../src/audio/player";
 import { sampleScore } from "../../src/model/sample";
-import { createEmptyScore } from "../../src/model/newScore";
+import { blankScore } from "./scores";
 import { scoreProblems } from "../../src/model/validate";
 import { check, checkThrows, section } from "./harness";
 
@@ -136,18 +136,9 @@ check("元の楽譜は書き換えない", JSON.stringify(sampleScore.measures[0
   check("打ち込んだ楽譜の backup は小節の長さ", backups.length === 2 && backups.every((d) => d === 1920), backups.join(","));
 }
 
-section("新規作成");
-{
-  const created = createEmptyScore({ title: "新しい曲", tempo: 90, fifths: 2, time: { beats: 3, beatType: 4 }, measures: 8 });
-  check("新規作成の小節数", created.measures.length === 8);
-  check("新規作成は約束事を満たす", scoreProblems(created).length === 0, scoreProblems(created).join(" / "));
-  checkStaff("新規作成の小節は休符だけ", created, 7, 2, "rest:half.@0");
-  check("小節の id は重複しない", new Set(created.measures.map((m) => m.id)).size === 8);
-}
-
 section("楽譜の設定");
 {
-  const created = createEmptyScore({ title: "新しい曲", tempo: 90, fifths: 2, time: { beats: 3, beatType: 4 }, measures: 8 });
+  const created = blankScore({ title: "新しい曲", tempo: 90, fifths: 2, time: { beats: 3, beatType: 4 }, measures: 8 });
   check("タイトルを変える", setTitle(created, "別の曲").title === "別の曲");
   check("調号を変えても音は変えない", JSON.stringify(setKeySignature(sampleScore, 3).measures) === JSON.stringify(sampleScore.measures));
   checkThrows("調号の範囲外", () => setKeySignature(sampleScore, 8), "調号は");

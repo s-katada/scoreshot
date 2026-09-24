@@ -1,4 +1,4 @@
-import { createEmptyScore } from "../../src/model/newScore";
+import { blankScore } from "./scores";
 import { sampleScore } from "../../src/model/sample";
 import {
   addScore,
@@ -49,7 +49,7 @@ async function run() {
   localStorage.clear();
   const a = await addScore({ ...sampleScore, title: "A" });
   await new Promise((r) => setTimeout(r, 5));
-  const b = await addScore(createEmptyScore({ title: "B", tempo: 90, fifths: 0, time: { beats: 3, beatType: 4 }, measures: 2 }));
+  const b = await addScore(blankScore({ title: "B", tempo: 90, fifths: 0, time: { beats: 3, beatType: 4 }, measures: 2 }));
   const listed = await listScores();
   check("一覧は新しい順", listed.map((e) => e.title).join(",") === "B,A", listed.map((e) => e.title).join(","));
   check("一覧に小節数", listed[0].measures === 2);

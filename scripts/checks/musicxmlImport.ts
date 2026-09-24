@@ -5,7 +5,7 @@ import { scoreToMusicXml } from "../../src/model/musicxml";
 import { MusicXmlImportError, parseMusicXml } from "../../src/model/musicxmlImport";
 import { readMusicXmlFile } from "../../src/model/musicxmlFile";
 import { strToU8, zipSync } from "fflate";
-import { createEmptyScore } from "../../src/model/newScore";
+import { blankScore } from "./scores";
 import { sampleScore } from "../../src/model/sample";
 import { pitchToName, type Score, type StaffNumber } from "../../src/model/score";
 import { check, checkThrows, section } from "./harness";
@@ -37,7 +37,7 @@ const roundTrip = parseMusicXml(scoreToMusicXml(sampleScore));
 check("サンプルの往復", shape(roundTrip.score) === shape(sampleScore) && roundTrip.warnings.length === 0,
   roundTrip.warnings.join(" / "));
 
-const custom = createEmptyScore({ title: "臨時記号 & <記号>", tempo: 72, fifths: 3, time: { beats: 6, beatType: 8 }, measures: 2 });
+const custom = blankScore({ title: "臨時記号 & <記号>", tempo: 72, fifths: 3, time: { beats: 6, beatType: 8 }, measures: 2 });
 const customXml = scoreToMusicXml({
   ...custom,
   measures: [
