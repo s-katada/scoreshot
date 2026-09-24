@@ -2,6 +2,7 @@ import { scoreToTimedNotes } from "../../src/audio/player";
 import { MIDI_PPQ, scoreToMidi } from "../../src/model/midi";
 import { sampleScore } from "../../src/model/sample";
 import { check, section } from "./harness";
+import { tiedScore } from "./scores";
 
 section("MIDI 書き出し");
 
@@ -66,3 +67,15 @@ check("発音の時刻が再生と一致", JSON.stringify(expected) === JSON.str
 check("右手と左手はチャンネルを分ける", ons.filter((e) => e.track === 1).every((e) => (e.status & 0x0f) === 0) && ons.filter((e) => e.track === 2).every((e) => (e.status & 0x0f) === 1));
 const firstChord = ons.filter((e) => e.track === 2 && e.tick === 0).map((e) => e.data[0]);
 check("左手の和音 C3 E3 G3", JSON.stringify(firstChord.sort()) === "[48,52,55]", JSON.stringify(firstChord));
+
+{
+  // タイでつながった音は 1 回だけ発音し、つながった先の終わりで消音する (#16)
+  const tied = parse(scoreToMidi(tiedScore())).events.filter((e) => e.track === 1);
+  const c4 = (status: number) =>
+    tied.filter((e) => (e.status & 0xf0) === status && e.data[0] === 60 && (status === 0x80 || e.data[1] > 0)).map((e) => e.tick);
+  check(
+    "タイでつながった音は 1 つの音になる",
+    JSON.stringify(c4(0x90)) === JSON.stringify([2 * MIDI_PPQ]) && JSON.stringify(c4(0x80)) === JSON.stringify([5 * MIDI_PPQ]),
+    `発音 ${JSON.stringify(c4(0x90))} 消音 ${JSON.stringify(c4(0x80))}`,
+  );
+}
