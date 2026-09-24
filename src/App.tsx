@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { Banner } from "./components/Banner";
-import { ConfirmButton } from "./components/ConfirmButton";
 import { EditorToolbar } from "./components/EditorToolbar";
 import { FileMenu } from "./components/FileMenu";
 import { LibraryPanel } from "./components/LibraryPanel";
@@ -286,18 +285,6 @@ export default function App() {
     [exportScore, score],
   );
 
-  /** 開いている楽譜を丸ごと差し替える。履歴に積むので元に戻せる */
-  const replaceScore = useCallback(
-    (next: Score) => {
-      stopPlayback();
-      clearSelection();
-      history.update(() => next);
-    },
-    [history, clearSelection, stopPlayback],
-  );
-
-  const resetToSample = useCallback(() => replaceScore(sampleScore), [replaceScore]);
-
   /** 画像から読み取った楽譜を、新しい楽譜として足して開く (#2) */
   const addRecognized = useCallback(
     async (recognition: Recognition, name: string) => {
@@ -377,14 +364,6 @@ export default function App() {
         >
           画像から読み取る
         </button>
-        <ConfirmButton
-          onConfirm={resetToSample}
-          confirmLabel="サンプルに戻す"
-          message="開いている楽譜がサンプルに置き換わります (元に戻すで戻せます)。"
-          disabled={!ready}
-        >
-          サンプルに戻す
-        </ConfirmButton>
         <FileMenu
           onExportMusicXml={() => void exportMusicXml()}
           onExportMidi={() => void exportMidi()}
