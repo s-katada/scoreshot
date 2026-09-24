@@ -1,6 +1,6 @@
 # scoreshot
 
-ピアノ譜のエディタ(macOS / iPadOS / iOS)。空の五線譜から手で書けて、編集でき、そのまま再生できる。紙の楽譜を取り込む OMR は入力手段のひとつという位置づけ(認識精度は原理的に 100% にならないので、本体はあくまでエディタ)。Tauri v2 + React + Vite + Tailwind 4、楽譜描画は OSMD、再生は Tone.js。配布は自分用・身内向けで App Store 公開はしない。
+紙のピアノ譜を写真から読み取り(OMR)、読み違いを直して、そのまま再生するアプリ(macOS / iPadOS / iOS)。楽譜を一から書く使い方はしない(新規作成や MusicXML の読み込みは #15 で削除した)。読み取りは原理的に 100% にならないので、直すための編集機能は要る。Tauri v2 + React + Vite + Tailwind 4、楽譜描画は OSMD、再生は Tone.js。配布は自分用・身内向けで App Store 公開はしない。
 
 - ツールは flake + direnv 管理。コマンドは direnv 有効シェルか `nix develop --command <cmd>` で実行(`cargo tauri dev` / `pnpm build` / `pnpm check` / `cargo tauri build --debug --no-bundle`)
 - **`src/model/score.ts` の `Score` が唯一の真実の情報源**。OSMD には状態を持たせず「MusicXML を渡されたら描き直すだけ」の存在として扱い、再生も MusicXML ではなく `Score` から直接組み立てる
@@ -20,7 +20,7 @@
 - **COOP/COEP のヘッダを外さない**(`vite.config.ts` と `src-tauri/tauri.conf.json`)。onnxruntime-web が複数スレッドで動くのに cross-origin isolation が要り、無いと 1 スレッドになって読み取りが 4 倍ほど遅くなる。外のリソースを読むものを足すときは COEP で止められないか確かめる
 - **Worker は ES モジュールで出す**(`vite.config.ts` の `worker.format`)。onnxruntime-web は自分のファイルの URL からスレッドの Worker を作るので、別のチャンクに分かれている必要がある
 - カメラの利用目的の文は `src-tauri/Info.plist`(macOS)と `src-tauri/Info.ios.plist`(iOS)の `NSCameraUsageDescription`。WebView 側の許可は wry が自動で与える
-- `pnpm check` は見た目では確認できない部分の検証(和音が同時刻か、付点の長さ、MusicXML の `<backup>` が上段の長さと一致するか、保存形式や MusicXML / MIDI の往復、OMR の後処理など)。OMR はモデルを使わず、モデルの出力を段 1 つぶん保存したもの(`scripts/fixtures/omr/`)で確かめる。テストフレームワークは入れていない
+- `pnpm check` は見た目では確認できない部分の検証(和音が同時刻か、付点の長さ、MusicXML の `<backup>` が上段の長さと一致するか、保存形式、MIDI の書き出し、OMR の後処理など)。OMR はモデルを使わず、モデルの出力を段 1 つぶん保存したもの(`scripts/fixtures/omr/`)で確かめる。テストフレームワークは入れていない
 - 作業の現在地・次にやること・壊しやすい所は `docs/roadmap.md`(もとは issue #9)、各機能の仕様は issue にある。まず `docs/roadmap.md` を読む
 - Claude Code on the web で作業するときは、`.claude/settings.json` の SessionStart フックでコミットの作者(author)を s-katada にしている(GitHub の草は作者で数えられるため)。コミッターは Claude のまま(web の環境はコミッターが Claude のコミットに署名し、Verified になる)。Claude はコミットメッセージの `Co-Authored-By` にも付く
 - コミットは1関心=1コミットの細粒度(Conventional Commits + 日本語メッセージ)。マイルストーンをまとめて1コミットにしない
