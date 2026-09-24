@@ -13,6 +13,7 @@ import {
   type Score,
   type StaffNumber,
 } from "../model/score";
+import { tiePairs } from "../model/ties";
 
 /** 時刻を解決した 1 音 */
 export interface TimedNote {
@@ -28,10 +29,11 @@ export interface TimedNote {
  * 楽譜を時刻つきの音の列に展開する。
  *
  * 段ごとに独立して時間が進む。和音の構成音は時間を進めず、直前の音と
- * 同じ時刻に置かれる。
+ * 同じ時刻に置かれる。タイでつながった音は弾き直さず、最初の音を
+ * つながった先の終わりまで伸ばす。
  */
 export function scoreToTimedNotes(score: Score): TimedNote[] {
-  const out: TimedNote[] = [];
+  const out: (TimedNote & { id: string })[] = [];
   const measureLength = measureQuarterLength(score.time);
   let measureStart = 0;
 
@@ -59,14 +61,28 @@ export function scoreToTimedNotes(score: Score): TimedNote[] {
       }
 
       if (note.pitch !== null) {
-        out.push({ at, name: pitchToName(note.pitch), length });
+        out.push({ id: note.id, at, name: pitchToName(note.pitch), length });
       }
     }
 
     measureStart += measureLength;
   }
 
-  return out.sort((a, b) => a.at - b.at);
+  out.sort((a, b) => a.at - b.at);
+  const pairs = tiePairs(score);
+  const byId = new Map(out.map((n) => [n.id, n]));
+  /** つながった先の音の id → 鳴らす (伸ばす) 最初の音 */
+  const heads = new Map<string, TimedNote>();
+  for (const n of out) {
+    const target = pairs.get(n.id);
+    const next = target && byId.get(target.id);
+    if (next !== undefined) {
+      const head = heads.get(n.id) ?? n;
+      head.length = next.at + next.length - head.at;
+      heads.set(next.id, head);
+    }
+  }
+  return out.filter((n) => !heads.has(n.id)).map(({ at, name, length }) => ({ at, name, length }));
 }
 
 /**
