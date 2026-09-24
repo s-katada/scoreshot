@@ -129,6 +129,14 @@ function readNote(value: unknown, path: string): Note {
       note.chord = true;
     }
   }
+  if (value.tie !== undefined) {
+    if (typeof value.tie !== "boolean") {
+      fail(`${path}.tie`, "真偽値ではない");
+    }
+    if (value.tie && pitch !== null) {
+      note.tie = true;
+    }
+  }
   return note;
 }
 
