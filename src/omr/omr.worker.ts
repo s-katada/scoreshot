@@ -41,19 +41,36 @@ function loadOrt(): Promise<Ort> {
   return ortModule;
 }
 
+/** 読み取りに使うモデルがアプリに入っていない (利用者にそのまま見せてよい) */
+class MissingModelError extends Error {
+  constructor(file: string) {
+    super(
+      `読み取りに使うモデル (${file}) がアプリに入っていません。` +
+        "pnpm omr:models で public/models/ に置いてから、起動し直すかビルドし直してください。",
+    );
+    this.name = "MissingModelError";
+  }
+}
+
 async function fetchModel(file: string): Promise<Uint8Array> {
   let response: Response;
   try {
     response = await fetch(`${import.meta.env.BASE_URL}models/${file}`);
   } catch {
-    response = new Response(null, { status: 404 });
+    throw new MissingModelError(file);
   }
-  if (!response.ok) {
-    throw new Error(
-      `読み取りに使うモデル (${file}) がアプリに入っていません。pnpm omr:models で取ってきてからビルドしてください。`,
-    );
+  // 無いファイルを頼むと、Vite も Tauri も 404 ではなく index.html を返す
+  // (画面の行き先を index.html に任せるため)。そのまま読ませると
+  // 「protobuf parsing failed」という分かりにくいエラーになる
+  if (!response.ok || (response.headers.get("content-type") ?? "").startsWith("text/html")) {
+    throw new MissingModelError(file);
   }
-  return new Uint8Array(await response.arrayBuffer());
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  // ONNX のファイルは protobuf で、先頭は ir_version (1 番のフィールド、varint) の 0x08
+  if (bytes.length === 0 || bytes[0] !== 0x08) {
+    throw new MissingModelError(file);
+  }
+  return bytes;
 }
 
 function loadModel(spec: ModelSpec): Promise<SegmentationModel> {
@@ -82,7 +99,7 @@ scope.onmessage = (event) => {
       scope.postMessage({
         type: "error",
         message: error instanceof Error ? error.message : String(error),
-        expected: error instanceof RecognitionError,
+        expected: error instanceof RecognitionError || error instanceof MissingModelError,
       }),
     );
 };
