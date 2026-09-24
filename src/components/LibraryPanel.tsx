@@ -1,11 +1,11 @@
 /**
- * 楽譜ライブラリの一覧。開く・複製・名前の変更・削除と、新規作成の入口 (#6)。
+ * 楽譜ライブラリの一覧。開く・複製・名前の変更・削除 (#6)。
  */
 
 import { useState, type FormEvent } from "react";
 import type { LibraryEntry } from "../storage/library";
 import { ConfirmButton } from "./ConfirmButton";
-import { primaryButtonClass, secondaryButtonClass, smallButtonClass } from "./styles";
+import { secondaryButtonClass, smallButtonClass } from "./styles";
 
 interface LibraryPanelProps {
   entries: LibraryEntry[];
@@ -16,7 +16,6 @@ interface LibraryPanelProps {
   onDuplicate: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
-  onCreate: () => void;
   onClose: () => void;
 }
 
@@ -80,7 +79,6 @@ export function LibraryPanel({
   onDuplicate,
   onRename,
   onDelete,
-  onCreate,
   onClose,
 }: LibraryPanelProps) {
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -93,9 +91,6 @@ export function LibraryPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-medium">楽譜一覧 ({entries.length})</h2>
         <div className="flex gap-2">
-          <button type="button" onClick={onCreate} className={primaryButtonClass}>
-            ＋ 新しい楽譜
-          </button>
           <button type="button" onClick={onClose} className={secondaryButtonClass}>
             閉じる
           </button>

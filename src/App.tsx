@@ -4,7 +4,6 @@ import { ConfirmButton } from "./components/ConfirmButton";
 import { EditorToolbar } from "./components/EditorToolbar";
 import { FileMenu } from "./components/FileMenu";
 import { LibraryPanel } from "./components/LibraryPanel";
-import { NewScoreForm } from "./components/NewScoreForm";
 import { OmrPanel } from "./components/OmrPanel";
 import { ScoreSettings } from "./components/ScoreSettings";
 import { ScoreView } from "./components/ScoreView";
@@ -19,7 +18,6 @@ import { scoreToMidi } from "./model/midi";
 import { scoreToMusicXml } from "./model/musicxml";
 import { readMusicXmlFile } from "./model/musicxmlFile";
 import { MusicXmlImportError } from "./model/musicxmlImport";
-import { createEmptyScore, type NewScoreOptions } from "./model/newScore";
 import type { Recognition } from "./omr/recognize";
 import { sampleScore } from "./model/sample";
 import { measureQuarterLength, type Score } from "./model/score";
@@ -81,7 +79,6 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
-  const [creating, setCreating] = useState(false);
   const [reading, setReading] = useState(false);
   // 読み込み・書き出しなどの結果のお知らせ
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -357,19 +354,6 @@ export default function App() {
     [addAndOpen],
   );
 
-  const createScore = useCallback(
-    async (options: NewScoreOptions) => {
-      setCreating(false);
-      setLibraryOpen(false);
-      try {
-        await addAndOpen(createEmptyScore(options));
-      } catch (error) {
-        setNotice({ tone: "error", text: `楽譜を作れませんでした。\n${describeError(error)}` });
-      }
-    },
-    [addAndOpen],
-  );
-
   const toggleLibrary = useCallback(() => {
     if (!libraryOpen) {
       void refreshEntries();
@@ -417,15 +401,6 @@ export default function App() {
         </button>
         <button
           type="button"
-          onClick={() => setCreating((c) => !c)}
-          disabled={!ready}
-          aria-expanded={creating}
-          className={secondaryButtonClass}
-        >
-          新規作成
-        </button>
-        <button
-          type="button"
           onClick={() => setReading((r) => !r)}
           disabled={!ready}
           aria-expanded={reading}
@@ -449,15 +424,6 @@ export default function App() {
         />
       </section>
 
-      {creating && (
-        <NewScoreForm
-          onCreate={(options) => void createScore(options)}
-          onCancel={() => setCreating(false)}
-          submitLabel="作成"
-          notice="新しい楽譜として楽譜一覧に足し、それを開きます。"
-        />
-      )}
-
       {reading && (
         <OmrPanel
           onRecognized={(recognition, name) => void addRecognized(recognition, name)}
@@ -474,7 +440,6 @@ export default function App() {
           onDuplicate={(id) => void duplicateScore(id)}
           onRename={(id, title) => void renameScore(id, title)}
           onDelete={(id) => void removeScore(id)}
-          onCreate={() => setCreating(true)}
           onClose={() => setLibraryOpen(false)}
         />
       )}
