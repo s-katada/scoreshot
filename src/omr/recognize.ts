@@ -252,6 +252,31 @@ export function recognize(input: Page): Recognition {
         lastX = item.x;
       }
     }
+    // 読み違いで音が前の音と重なったり、小節からはみ出したりしたまま
+    // 組み立てると小節ごと捨てることになるので、その音だけ落とすか縮める
+    for (const staff of [1, 2] as StaffNumber[]) {
+      const kept: ImportedEvent[] = [];
+      let end = 0;
+      for (const event of [...staves[staff]].sort((a, b) => a.onset - b.onset)) {
+        if (event.onset < end - 1e-9 || event.onset >= measureLength - 1e-9) {
+          overflow.push(index + 1);
+          continue;
+        }
+        let duration = event.duration;
+        if (event.onset + durationLength(duration) > measureLength + 1e-9) {
+          const fitted = durationFromLength(measureLength - event.onset);
+          if (fitted === null) {
+            overflow.push(index + 1);
+            continue;
+          }
+          duration = fitted;
+          overflow.push(index + 1);
+        }
+        kept.push({ ...event, duration });
+        end = event.onset + durationLength(duration);
+      }
+      staves[staff] = kept;
+    }
     try {
       measures.push(measureFromEvents(time, staves));
     } catch (error) {
