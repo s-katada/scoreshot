@@ -6,12 +6,13 @@
  *
  * 「各段は常に小節をちょうど埋めている」という約束 (validate.ts) を保つ。
  * 音符を置く・消す・長さを変えるときは、空いた所を休符で埋め、はみ出す所は
- * 上書きする (MuseScore の入力と同じ考え方)。小節線をまたぐにはタイが
- * 要るので (#3 の非スコープ)、小節からはみ出す操作はエラーにする。
+ * 上書きする (MuseScore の入力と同じ考え方)。小節からはみ出す操作は
+ * エラーにする (小節線をまたぐ音は、分けて置いてタイでつなぐ)。
  */
 
 import { createId } from "./id";
 import { comparePitch, samePitch } from "./pitch";
+import { tieTarget } from "./ties";
 import {
   QUARTER_LENGTH,
   measureQuarterLength,
@@ -495,7 +496,11 @@ export function setEventDuration(
     // 休符のまとまりとして置いたので、隣の休符とはまとめ直さない
     return { score: next, noteIds: [noteId] };
   }
-  const notes = event.notes.map((n, i) => makeNote(n.id, n.pitch, duration, staff, i > 0));
+  // 長さを変えてもタイの印は残す
+  const notes = event.notes.map((n, i) => ({
+    ...makeNote(n.id, n.pitch, duration, staff, i > 0),
+    ...(n.tie ? { tie: true } : {}),
+  }));
   return {
     score: overwrite(score, position, length, notes),
     noteIds: [noteId],
@@ -521,6 +526,29 @@ export function toggleRest(score: Score, noteId: string, pitch: Pitch): EditResu
     score: overwrite(score, position, event.length, [rest]),
     noteIds: [rest.id],
   };
+}
+
+/**
+ * 音符に次の同じ高さの音へのタイを付ける。付いていれば外す。
+ * つなぐ相手 (同じ段で次に鳴る同じ高さの音) が無ければ付けられない。
+ */
+export function toggleTie(score: Score, noteId: string): EditResult {
+  const { measureIndex, note } = mustLocate(score, noteId);
+  if (note.pitch === null) {
+    throw new EditError("休符はタイでつなげません");
+  }
+  if (!note.tie && tieTarget(score, noteId) === null) {
+    throw new EditError("次に鳴る音に同じ高さの音が無いので、タイでつなげません");
+  }
+  const measure = score.measures[measureIndex];
+  const notes = measure.notes.map((n) => {
+    if (n.id !== noteId) {
+      return n;
+    }
+    const { tie, ...rest } = n;
+    return tie ? rest : { ...rest, tie: true };
+  });
+  return { score: replaceMeasure(score, measureIndex, { ...measure, notes }), noteIds: [noteId] };
 }
 
 /** 両段とも休符だけの小節を作る */
