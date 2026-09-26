@@ -18,6 +18,7 @@ import type { GhostNote, ScoreHit } from "../components/ScoreView";
 import {
   EditError,
   addChordNote,
+  clearNewSystems,
   durationLength,
   insertMeasure,
   locateNote,
@@ -28,6 +29,7 @@ import {
   setNotePitch,
   snapOnset,
   staffEvents,
+  toggleNewSystem,
   toggleRest,
   toggleTie,
   type EditResult,
@@ -514,6 +516,19 @@ export function useScoreEditor({ history, onSound }: Options) {
     }
   }, [selected, score.measures.length, apply]);
 
+  /** 選んでいる小節から次の段にする。付いていれば外す */
+  const toggleSelectedNewSystem = useCallback(() => {
+    if (selected === null) {
+      return;
+    }
+    const index = selected.measureIndex;
+    apply((s) => ({ score: toggleNewSystem(s, index), noteIds: [selected.note.id] }));
+  }, [selected, apply]);
+
+  const clearAllNewSystems = useCallback(() => {
+    apply((s) => ({ score: clearNewSystems(s), noteIds: [] }));
+  }, [apply]);
+
   const selectedIds = useMemo(
     () => (selected === null ? [] : [selected.note.id]),
     [selected],
@@ -565,6 +580,11 @@ export function useScoreEditor({ history, onSound }: Options) {
     deleteSelected,
     addMeasure,
     deleteMeasure,
+    toggleSelectedNewSystem,
+    clearAllNewSystems,
+    /** 選んでいる小節に改段の印が付いているか */
+    selectedNewSystem: selected !== null && score.measures[selected.measureIndex]?.newSystem === true,
+    hasNewSystems: score.measures.some((m) => m.newSystem),
     undo,
     redo,
     canUndo: history.canUndo,

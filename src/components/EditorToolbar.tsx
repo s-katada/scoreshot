@@ -183,6 +183,21 @@ export function EditorToolbar({ editor }: { editor: ScoreEditor }) {
           >
             削除
           </ToolButton>
+          <ToolButton
+            onClick={editor.toggleSelectedNewSystem}
+            disabled={selected === null || selected.measureIndex === 0}
+            active={editor.selectedNewSystem}
+            title="選んでいる小節から次の段にする (もう一度押すと外す)"
+          >
+            ここで改段
+          </ToolButton>
+          <ToolButton
+            onClick={editor.clearAllNewSystems}
+            disabled={!editor.hasNewSystems}
+            title="改段の指定をすべて外し、段組みを幅に任せる"
+          >
+            改段をすべて外す
+          </ToolButton>
         </Group>
 
         <Group label="履歴">
