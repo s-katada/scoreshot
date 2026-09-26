@@ -25,6 +25,7 @@ import { scoreToMusicXml } from "../model/musicxml";
 import { comparePitch } from "../model/pitch";
 import {
   measureQuarterLength,
+  scoreSpacing,
   type Pitch,
   type Score,
   type StaffNumber,
@@ -435,6 +436,8 @@ export function ScoreView({
   selectedRef.current = selectedNoteIds;
   // 描き直すたびに増やし、配置に依存する表示 (選択・案内) を更新させる
   const [renderCount, setRenderCount] = useState(0);
+  // OSMD の音符の間隔の既定値。楽譜の倍率 (score.spacing) はこれに掛ける
+  const defaultSpacingRef = useRef(1);
 
   const musicXml = useMemo(() => scoreToMusicXml(score), [score]);
 
@@ -508,6 +511,7 @@ export function ScoreView({
       ],
     });
     osmdRef.current = osmd;
+    defaultSpacingRef.current = osmd.EngravingRules.VoiceSpacingMultiplierVexflow;
 
     let width = container.clientWidth;
     let timer: number | undefined;
@@ -564,6 +568,8 @@ export function ScoreView({
         if (loadTokenRef.current !== token) {
           return;
         }
+        // 小節の幅 (#17)。描き直すまで覚えているので、幅に合わせた描き直しにも効く
+        osmd.EngravingRules.VoiceSpacingMultiplierVexflow = defaultSpacingRef.current * scoreSpacing(score);
         osmd.render();
       } catch {
         // 読み込み中に破棄された場合など。新しい世代が描き直す
