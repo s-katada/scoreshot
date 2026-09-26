@@ -9,6 +9,7 @@ import {
   setEventDuration,
   setKeySignature,
   setNotePitch,
+  setSpacing,
   setTimeSignature,
   setTitle,
   snapOnset,
@@ -21,7 +22,7 @@ import { scoreToMusicXml } from "../../src/model/musicxml";
 import { scoreToTimedNotes } from "../../src/audio/player";
 import { sampleScore } from "../../src/model/sample";
 import { blankScore } from "./scores";
-import { scoreProblems } from "../../src/model/validate";
+import { scoreProblems, validateScore } from "../../src/model/validate";
 import { check, checkThrows, section } from "./harness";
 
 section("編集操作");
@@ -151,4 +152,13 @@ section("楽譜の設定");
   const trimmed = setTimeSignature(placeNotes(empty44, { measureIndex: 0, staff: 1, onset: 0 }, [C4], half).score, { beats: 2, beatType: 4 });
   checkStaff("末尾の休符だけなら削って縮める", trimmed, 0, 1, "C4:half@0");
   check("拍子を変えた楽譜は約束事を満たす", scoreProblems(to54).length === 0 && scoreProblems(trimmed).length === 0);
+
+  // 小節の幅 (#17): 見た目だけの設定で、書き出しには効かない
+  const wide = setSpacing(created, 1.5);
+  check("小節の幅を変える", wide.spacing === 1.5 && created.spacing === undefined);
+  check("小節の幅を 1 に戻すと印を外す", !("spacing" in setSpacing(wide, 1)));
+  checkThrows("小節の幅の範囲外", () => setSpacing(created, 3), "小節の幅は");
+  check("小節の幅は MusicXML に効かない", scoreToMusicXml(wide) === scoreToMusicXml(created));
+  check("保存した楽譜から小節の幅を読み込める", validateScore(JSON.parse(JSON.stringify(wide))).spacing === 1.5);
+  checkThrows("範囲外の小節の幅は読み込まない", () => validateScore({ ...JSON.parse(JSON.stringify(wide)), spacing: 9 }), "score.spacing");
 }
