@@ -500,6 +500,9 @@ export function ScoreView({
       backend: "svg",
       drawTitle: true,
       drawPartNames: false,
+      // 小節の改段の印 (<print new-system="yes"/>) で段を改める (#18)。
+      // 印の無い所は、これまでどおり幅に収まらなければ自動で改める
+      newSystemFromXML: true,
       // 今どこを弾いているかを示す縦線
       cursorsOptions: [
         {
