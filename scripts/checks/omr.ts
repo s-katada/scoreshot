@@ -267,6 +267,23 @@ function compare(expected: Score, actual: Score): { found: number; exact: number
     tilted.measures.length === truth.measures.length,
     `小節 ${tilted.measures.length}/${truth.measures.length}`,
   );
+  // 同じ段を縦に 2 つ並べると、2 段目の最初の小節に改段の印が付く (#18)
+  const stack = <T extends GrayImage | LabelImage>(image: T): T => {
+    const data = new Uint8Array(image.data.length * 2);
+    data.set(image.data);
+    data.set(image.data, image.data.length);
+    return { ...image, height: image.height * 2, data };
+  };
+  const twoSystems = recognize(
+    makePage(stack(fixture.gray), stack(fixture.staff), stack(fixture.symbols), TARGET_LINE_DISTANCE),
+  ).score;
+  const breaks = twoSystems.measures.flatMap((m, i) => (m.newSystem ? [i] : []));
+  check(
+    "紙の段の頭の小節に改段の印を付ける",
+    twoSystems.measures.length === truth.measures.length * 2 &&
+      JSON.stringify(breaks) === JSON.stringify([truth.measures.length]),
+    `小節 ${twoSystems.measures.length} 改段 ${JSON.stringify(breaks)}`,
+  );
   check(
     "傾いた画像でも音の 95% 以上を読める",
     tiltedResult.found >= tiltedResult.total * 0.95,

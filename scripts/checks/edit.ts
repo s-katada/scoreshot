@@ -1,6 +1,7 @@
 import {
   EditError,
   addChordNote,
+  clearNewSystems,
   emptyMeasure,
   insertMeasure,
   placeNotes,
@@ -14,6 +15,7 @@ import {
   setTitle,
   snapOnset,
   staffEvents,
+  toggleNewSystem,
   toggleRest,
   type StaffEvent,
 } from "../../src/model/edit";
@@ -161,4 +163,17 @@ section("楽譜の設定");
   check("小節の幅は MusicXML に効かない", scoreToMusicXml(wide) === scoreToMusicXml(created));
   check("保存した楽譜から小節の幅を読み込める", validateScore(JSON.parse(JSON.stringify(wide))).spacing === 1.5);
   checkThrows("範囲外の小節の幅は読み込まない", () => validateScore({ ...JSON.parse(JSON.stringify(wide)), spacing: 9 }), "score.spacing");
+
+  // 改段 (#18)
+  const broken = toggleNewSystem(created, 4);
+  check("小節から次の段にする", broken.measures[4].newSystem === true && created.measures[4].newSystem === undefined);
+  check("もう一度押すと外す", !("newSystem" in toggleNewSystem(broken, 4).measures[4]));
+  checkThrows("最初の小節には付けない", () => toggleNewSystem(created, 0), "最初の小節");
+  check("MusicXML に <print new-system> を書く", (scoreToMusicXml(broken).match(/<print new-system="yes"\/>/g) ?? []).length === 1);
+  const removed = removeMeasure(broken, 4);
+  check("段の頭の小節を消したら、区切りは次の小節に移る", removed.measures[4].newSystem === true && removed.measures.length === 7);
+  check("前の小節を足しても区切りは同じ小節に付いたまま", insertMeasure(broken, 2).measures[5].newSystem === true);
+  check("音を置いても区切りは消えない", placeNotes(broken, { measureIndex: 4, staff: 1, onset: 0 }, [C4], half).score.measures[4].newSystem === true);
+  check("改段をすべて外す", clearNewSystems(broken).measures.every((m) => !("newSystem" in m)));
+  check("保存した楽譜から改段を読み込める", validateScore(JSON.parse(JSON.stringify(broken))).measures[4].newSystem === true);
 }
