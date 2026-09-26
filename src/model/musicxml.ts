@@ -119,6 +119,10 @@ function measureToXml(
   const pad = indent(level);
   const inner = indent(level + 1);
   const lines: string[] = [`${pad}<measure number="${index + 1}">`];
+  // 改段 (#18)。小節の中身より前に書く
+  if (measure.newSystem && index > 0) {
+    lines.push(`${inner}<print new-system="yes"/>`);
+  }
 
   // 調号・拍子・段数・音部記号は最初の小節でのみ宣言する
   if (index === 0) {
