@@ -65,6 +65,11 @@ export interface Note {
 export interface Measure {
   id: string;
   notes: Note[];
+  /**
+   * true なら、この小節から次の段にする (改段)。紙の楽譜と同じ段組みで
+   * 見るためのもので、再生には効かない (#18)
+   */
+  newSystem?: boolean;
 }
 
 export interface Score {

@@ -581,8 +581,38 @@ export function removeMeasure(score: Score, index: number): Score {
     throw new EditError("最後の 1 小節は消せません");
   }
   const measures = score.measures.slice();
-  measures.splice(index, 1);
+  const [removed] = measures.splice(index, 1);
+  // 段の頭の小節を消したら、段の区切りは次の小節に引き継ぐ
+  const next = measures[index];
+  if (removed.newSystem && next !== undefined && index > 0) {
+    measures[index] = { ...next, newSystem: true };
+  }
+  if (measures[0].newSystem) {
+    const { newSystem: _unused, ...first } = measures[0];
+    measures[0] = first;
+  }
   return { ...score, measures };
+}
+
+/** 小節 index から次の段にする (改段)。付いていれば外す */
+export function toggleNewSystem(score: Score, index: number): Score {
+  const measure = measureAt(score, index);
+  if (index === 0) {
+    throw new EditError("最初の小節は、もともと段の頭です");
+  }
+  const { newSystem, ...rest } = measure;
+  return replaceMeasure(score, index, newSystem ? rest : { ...rest, newSystem: true });
+}
+
+/** 改段の印をすべて外す (段組みを幅に任せる) */
+export function clearNewSystems(score: Score): Score {
+  if (!score.measures.some((m) => m.newSystem)) {
+    return score;
+  }
+  return {
+    ...score,
+    measures: score.measures.map(({ newSystem: _unused, ...m }) => m),
+  };
 }
 
 /**

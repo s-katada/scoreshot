@@ -151,10 +151,19 @@ function readMeasure(value: unknown, path: string): Measure {
   if (!Array.isArray(notes)) {
     fail(`${path}.notes`, "配列ではない");
   }
-  return {
+  const measure: Measure = {
     id,
     notes: notes.map((n, i) => readNote(n, `${path}.notes[${i}]`)),
   };
+  if (value.newSystem !== undefined) {
+    if (typeof value.newSystem !== "boolean") {
+      fail(`${path}.newSystem`, "真偽値ではない");
+    }
+    if (value.newSystem) {
+      measure.newSystem = true;
+    }
+  }
+  return measure;
 }
 
 /**
