@@ -15,8 +15,11 @@ import { comparePitch, samePitch } from "./pitch";
 import { tieTarget } from "./ties";
 import {
   QUARTER_LENGTH,
+  SPACING_MAX,
+  SPACING_MIN,
   measureQuarterLength,
   noteQuarterLength,
+  scoreSpacing,
   type Measure,
   type Note,
   type NoteType,
@@ -623,6 +626,18 @@ export function snapOnset(
 
 export function setTitle(score: Score, title: string): Score {
   return score.title === title ? score : { ...score, title };
+}
+
+/** 小節の幅 (音符の間隔) の倍率を変える。1 なら印を外す */
+export function setSpacing(score: Score, spacing: number): Score {
+  if (!Number.isFinite(spacing) || spacing < SPACING_MIN || spacing > SPACING_MAX) {
+    throw new EditError(`小節の幅は ${SPACING_MIN}〜${SPACING_MAX} 倍の範囲で選んでください`);
+  }
+  if (scoreSpacing(score) === spacing) {
+    return score;
+  }
+  const { spacing: _old, ...rest } = score;
+  return spacing === 1 ? rest : { ...rest, spacing };
 }
 
 /**

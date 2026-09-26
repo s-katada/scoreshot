@@ -12,6 +12,8 @@
 
 import {
   NOTE_TYPES,
+  SPACING_MAX,
+  SPACING_MIN,
   STEPS,
   measureQuarterLength,
   staffQuarterLength,
@@ -263,6 +265,18 @@ export function validateScore(value: unknown): Score {
     time: { beats, beatType },
     measures: measures.map((m, i) => readMeasure(m, `score.measures[${i}]`)),
   };
+  if (value.spacing !== undefined) {
+    const spacing = value.spacing;
+    if (typeof spacing !== "number" || !Number.isFinite(spacing)) {
+      fail("score.spacing", "数値ではない");
+    }
+    if (spacing < SPACING_MIN || spacing > SPACING_MAX) {
+      fail("score.spacing", `${SPACING_MIN}〜${SPACING_MAX} の範囲外 (${spacing})`);
+    }
+    if (spacing !== 1) {
+      score.spacing = spacing;
+    }
+  }
 
   const problems = scoreProblems(score);
   if (problems.length > 0) {

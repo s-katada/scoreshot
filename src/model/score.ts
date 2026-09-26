@@ -75,6 +75,19 @@ export interface Score {
   key: { fifths: number };
   time: { beats: number; beatType: number };
   measures: Measure[];
+  /**
+   * 表示するときの音符の間隔 (小節の幅) の倍率。無ければ 1。見た目だけの
+   * 設定で、再生や書き出しには効かない (#17)
+   */
+  spacing?: number;
+}
+
+/** 小節の幅の倍率の範囲 */
+export const SPACING_MIN = 0.5;
+export const SPACING_MAX = 2;
+
+export function scoreSpacing(score: Score): number {
+  return score.spacing ?? 1;
 }
 
 /**
