@@ -54,6 +54,8 @@ type Item =
 
 interface RawMeasure {
   staves: Record<StaffNumber, Item[]>;
+  /** 紙の上で段の頭にある小節か (2 段目以降)。同じ段組みで表示するのに使う */
+  systemStart: boolean;
 }
 
 function modeOf(values: number[]): number | null {
@@ -146,8 +148,9 @@ export function recognize(input: Page): Recognition {
           ? 2
           : 1;
 
+    const systemStart = raw.length;
     for (const [start, end] of measureBounds(page, system)) {
-      const measure: RawMeasure = { staves: { 1: [], 2: [] } };
+      const measure: RawMeasure = { staves: { 1: [], 2: [] }, systemStart: raw.length === systemStart && raw.length > 0 };
       const inside = (x: number) => x >= start && x < end;
       // 臨時記号は小節の中で、同じ段・同じ高さの後ろの音にも効く
       const carried = system.staves.map(() => new Map<number, number>());
@@ -277,15 +280,17 @@ export function recognize(input: Page): Recognition {
       }
       staves[staff] = kept;
     }
+    let measure: Measure;
     try {
-      measures.push(measureFromEvents(time, staves));
+      measure = measureFromEvents(time, staves);
     } catch (error) {
       if (!(error instanceof EditError)) {
         throw error;
       }
       warnings.push(`${index + 1} 小節目は組み立てられなかったため、空にしました (${error.message})。`);
-      measures.push(emptyMeasure(time));
+      measure = emptyMeasure(time);
     }
+    measures.push(m.systemStart ? { ...measure, newSystem: true } : measure);
   });
   if (overflow.length > 0) {
     const list = [...new Set(overflow)].slice(0, 8).join("・");
