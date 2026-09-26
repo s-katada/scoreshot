@@ -1,18 +1,20 @@
 /**
- * 楽譜の設定 (タイトル・調号・拍子) を変える欄。
+ * 楽譜の設定 (タイトル・調号・拍子・小節の幅) を変える欄。
  *
  * タイトルと拍子の数は、打ち終えたとき (フォーカスが外れたとき / Enter)
  * に反映する。1 文字ごとに楽譜を差し替えると、そのたびに描き直しと
- * 元に戻す履歴が 1 手ずつ積まれてしまうため。
+ * 元に戻す履歴が 1 手ずつ積まれてしまうため。小節の幅も同じ理由で、
+ * スライダーを離したときに反映する。
  */
 
 import { useEffect, useState, type KeyboardEvent } from "react";
 import {
   setKeySignature,
+  setSpacing,
   setTimeSignature,
   setTitle,
 } from "../model/edit";
-import type { Score } from "../model/score";
+import { SPACING_MAX, SPACING_MIN, scoreSpacing, type Score } from "../model/score";
 import { BEAT_TYPE_OPTIONS, KEY_SIGNATURES } from "./keySignatures";
 
 interface ScoreSettingsProps {
@@ -36,10 +38,18 @@ function commitOnEnter(event: KeyboardEvent<HTMLInputElement>) {
 export function ScoreSettings({ score, onEdit }: ScoreSettingsProps) {
   const [title, setTitleDraft] = useState(score.title);
   const [beats, setBeatsDraft] = useState(String(score.time.beats));
+  const [spacing, setSpacingDraft] = useState(scoreSpacing(score));
 
   // 元に戻す・読み込みなどで楽譜側が変わったら欄を追従させる
   useEffect(() => setTitleDraft(score.title), [score.title]);
   useEffect(() => setBeatsDraft(String(score.time.beats)), [score.time.beats]);
+  useEffect(() => setSpacingDraft(scoreSpacing(score)), [score]);
+
+  const commitSpacing = () => {
+    if (!onEdit((s) => setSpacing(s, spacing))) {
+      setSpacingDraft(scoreSpacing(score));
+    }
+  };
 
   const commitTitle = () => {
     const next = title.trim() === "" ? "無題" : title.trim();
@@ -123,6 +133,22 @@ export function ScoreSettings({ score, onEdit }: ScoreSettingsProps) {
           ))}
         </select>
       </div>
+
+      <label className="flex items-center gap-2" title="音符の間隔を広げたり詰めたりする (表示だけで、再生には効かない)">
+        <span className="opacity-60">小節の幅</span>
+        <input
+          type="range"
+          min={SPACING_MIN}
+          max={SPACING_MAX}
+          step={0.1}
+          value={spacing}
+          onChange={(e) => setSpacingDraft(Number(e.target.value))}
+          onPointerUp={commitSpacing}
+          onKeyUp={commitSpacing}
+          className="w-32"
+        />
+        <span className="w-12 tabular-nums opacity-60">{Math.round(spacing * 100)}%</span>
+      </label>
     </section>
   );
 }
