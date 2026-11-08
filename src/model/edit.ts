@@ -11,7 +11,16 @@
  */
 
 import { createId } from "./id";
-import { comparePitch, samePitch } from "./pitch";
+import {
+  PIANO_HIGHEST_MIDI,
+  PIANO_LOWEST_MIDI,
+  comparePitch,
+  midiNumber,
+  samePitch,
+  transposePitch,
+  transposedFifths,
+  transposedSteps,
+} from "./pitch";
 import { tieTarget } from "./ties";
 import {
   QUARTER_LENGTH,
@@ -19,6 +28,7 @@ import {
   SPACING_MIN,
   measureQuarterLength,
   noteQuarterLength,
+  pitchToName,
   scoreSpacing,
   type Measure,
   type Note,
@@ -679,6 +689,43 @@ export function setKeySignature(score: Score, fifths: number): Score {
     throw new EditError("調号は ♭7 つから ♯7 つまでです");
   }
   return score.key.fifths === fifths ? score : { ...score, key: { fifths } };
+}
+
+/** 移調できる幅 (半音)。上下 1 オクターブまで */
+export const TRANSPOSE_LIMIT = 12;
+
+/**
+ * すべての音を semitones 半音だけ上げ下げする (移調)。調号も同じだけずらし、
+ * 音の綴りは移調の音程に沿って付け替える (pitch.ts の transposePitch)。
+ * ピアノの鍵盤から外れる音が出るときは移調しない。
+ */
+export function transpose(score: Score, semitones: number): Score {
+  if (!Number.isInteger(semitones) || Math.abs(semitones) > TRANSPOSE_LIMIT) {
+    throw new EditError("移調は上下 1 オクターブまでです");
+  }
+  if (semitones === 0) {
+    return score;
+  }
+  const fifths = transposedFifths(score.key.fifths, semitones);
+  const steps = transposedSteps(score.key.fifths, fifths, semitones);
+  const measures = score.measures.map((measure, index) => ({
+    ...measure,
+    notes: measure.notes.map((note) => {
+      if (note.pitch === null) {
+        return note;
+      }
+      const pitch = transposePitch(note.pitch, semitones, steps, fifths);
+      const midi = midiNumber(pitch);
+      if (midi < PIANO_LOWEST_MIDI || midi > PIANO_HIGHEST_MIDI) {
+        throw new EditError(
+          `${index + 1} 小節目の ${pitchToName(note.pitch)} がピアノの鍵盤から外れるので、` +
+            `${semitones > 0 ? "上げ" : "下げ"}られません`,
+        );
+      }
+      return { ...note, pitch };
+    }),
+  }));
+  return { ...score, key: { fifths }, measures };
 }
 
 /**
