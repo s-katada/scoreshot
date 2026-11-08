@@ -10,3 +10,20 @@ ignoredBuiltDependencies:
 allowBuilds:
   gl: false
   protobufjs: false
+
+# --- 依存を入れるときの制約 (サプライチェーン攻撃への備え) ---
+# 公開から 7 日 (分で指定) たっていない版は入れない。乗っ取られた
+# アカウントから出た悪意ある版は、たいてい数日のうちに見つかって
+# 取り下げられるので、その間は待つ。急ぎで新しい版が要るときは
+# minimumReleaseAgeExclude にそのパッケージを足す。
+minimumReleaseAge: 10080
+# 以前の版より信頼の根拠 (trusted publishing や provenance) が弱く
+# なった版は入れない。CI から出していたものが手元のトークンで
+# 出されたら、乗っ取りを疑う。
+trustPolicy: no-downgrade
+# 依存の依存が git リポジトリや tarball の URL を直接指すのを許さない。
+# レジストリを通らないので上の 2 つの確認をすり抜ける。
+blockExoticSubdeps: true
+# allowBuilds で許可も拒否もしていないパッケージがビルド
+# (postinstall など) を持っていたら、黙って飛ばさずエラーにする
+strictDepBuilds: true
