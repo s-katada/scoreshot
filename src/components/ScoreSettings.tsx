@@ -1,5 +1,5 @@
 /**
- * 楽譜の設定 (タイトル・調号・拍子・小節の幅) を変える欄。
+ * 楽譜の設定 (タイトル・調号・移調・拍子・小節の幅) を変える欄。
  *
  * タイトルと拍子の数は、打ち終えたとき (フォーカスが外れたとき / Enter)
  * に反映する。1 文字ごとに楽譜を差し替えると、そのたびに描き直しと
@@ -13,9 +13,10 @@ import {
   setSpacing,
   setTimeSignature,
   setTitle,
+  transpose,
 } from "../model/edit";
 import { SPACING_MAX, SPACING_MIN, scoreSpacing, type Score } from "../model/score";
-import { BEAT_TYPE_OPTIONS, KEY_SIGNATURES } from "./keySignatures";
+import { BEAT_TYPE_OPTIONS, KEY_SIGNATURES, transposeOptions } from "./keySignatures";
 
 interface ScoreSettingsProps {
   score: Score;
@@ -98,6 +99,31 @@ export function ScoreSettings({ score, onEdit }: ScoreSettingsProps) {
           {KEY_SIGNATURES.map((k) => (
             <option key={k.fifths} value={k.fifths}>
               {k.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {/* 選ぶとすぐ移調する。選んだ値は残さず、いつも「選ぶ…」に戻す */}
+      <label
+        className="flex items-center gap-2"
+        title="すべての音を同じ幅だけ上げ下げし、調号も合わせて変える (調号だけを変えると、鳴る高さはそのままで ♯♭♮ の付き方が変わる)"
+      >
+        <span className="opacity-60">移調</span>
+        <select
+          value=""
+          onChange={(e) => {
+            const semitones = Number(e.target.value);
+            onEdit((s) => transpose(s, semitones));
+          }}
+          className={fieldClass}
+        >
+          <option value="" disabled>
+            選ぶ…
+          </option>
+          {transposeOptions(score.key.fifths).map((o) => (
+            <option key={o.semitones} value={o.semitones}>
+              {o.label}
             </option>
           ))}
         </select>
