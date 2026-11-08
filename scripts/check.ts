@@ -8,6 +8,7 @@ import "./checks/edit";
 import "./checks/accidentals";
 import "./checks/midi";
 import "./checks/ties";
+import "./checks/transpose";
 import "./checks/library";
 import "./checks/omr";
 import { finish } from "./checks/harness";
